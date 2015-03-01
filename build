@@ -1,0 +1,3 @@
+#!/bin/sh
+
+ocamlbuild -use-ocamlfind -pkgs compiler-libs.common,ppx_tools.metaquot ppx_bitstring.native

@@ -5,11 +5,17 @@ open Parsetree
 open Longident
 open Printf
 
-let make_symbol =
+let mksym =
   let i = ref 1000 in
   fun name ->
     incr i; let i = !i in
     sprintf "__pabitstring_%s_%d" name i
+
+let mkpatvar name loc =
+  Pat.var (Location.mkloc name loc)
+
+let mkident name loc =
+  Exp.ident (Location.mkloc (Longident.parse name) loc)
 
 let generate_parse_error loc msg=
   Exp.apply (Exp.ident (Location.mkloc (Longident.parse "raise") loc)) [
@@ -31,45 +37,19 @@ let rec generate_case (dat, off, len) = function
       | Some r -> r
       | None -> hd.pc_rhs
       in
-      let value = make_symbol "value" in
-      let e = Exp.let_ Nonrecursive
-      [ Vb.mk
-        (Pat.var (Location.mkloc value hd.pc_lhs.ppat_loc))
-        (Exp.constant (Const_int 0))
-      ]
-      (Exp.ifthenelse (Exp.apply (Exp.ident (Location.mkloc (Longident.parse "=") hd.pc_lhs.ppat_loc)) [
-        ("", Exp.ident (Location.mkloc (Longident.parse value) hd.pc_lhs.ppat_loc));
-        ("", Exp.constant (Const_int 0))
-      ]) beh (Some (Exp.constant (Const_int (-1)))))
-      in
-      Some e
+      let loc = hd.pc_lhs.ppat_loc and vl = mksym "value" in
+      let pv = mkpatvar vl loc and iv = mkident vl loc in
+      Some [%expr let [%p pv] = 0 in if [%e iv] = 0 then [%e beh] else -1]
 
 let generate_base ident loc cases =
-  let datN = make_symbol "data" and offN = make_symbol "offset" and lenN = make_symbol "len" in
+  let datN = mksym "data" and offN = mksym "offset" and lenN = mksym "len" in
   let content = match generate_case (datN, offN, lenN) cases with
   | Some c -> c
   | None -> raise (Location.Error (Location.error ~loc "[%bitstring] failed parsing bitmatch"))
   in
-  Exp.let_ Nonrecursive
-  [ Vb.mk
-    (Pat.tuple [
-      (Pat.var (Location.mkloc datN ident.pexp_loc));
-      (Pat.var (Location.mkloc offN ident.pexp_loc));
-      (Pat.var (Location.mkloc lenN ident.pexp_loc))
-    ]) ident ]
-  content
-
-  (*
-  [%expr function | [%e ident] -> 0 ]
-  *)
-  (*
-  match cases with
-  | []      -> Exp.ident ~loc ident
-  | hd::tl  -> Exp.ident ~loc ident
-  *)
-  (*
-  Exp.ident ~loc ident
-  *)
+  let pa = mkpatvar datN loc and pb = mkpatvar offN loc and pc = mkpatvar lenN loc in
+  let tuple = [%pat? ([%p pa], [%p pb], [%p pc])] in
+  [%expr let [%p tuple] = [%e ident] in [%e content]]
 
 let getenv_mapper argv =
   (* Our getenv_mapper only overrides the handling of expressions in the default mapper. *)

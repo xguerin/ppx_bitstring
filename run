@@ -1,0 +1,3 @@
+#!/bin/sh
+
+ocamlfind ocamlc -ppx ./ppx_bitstring.native -dsource ../test2.ml
