@@ -1,2 +1,1 @@
-PKG compiler-libs.common
-EXT ppx_tools/ppx_metaquot
+PKG compiler-libs.common ppx_tools.metaquot
