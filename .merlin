@@ -1,1 +1,4 @@
-PKG compiler-libs.common ppx_tools.metaquot
+PKG core compiler-libs.common ppx_tools.metaquot
+
+S .
+B _build

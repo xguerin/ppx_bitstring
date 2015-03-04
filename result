@@ -26,7 +26,7 @@ let _ =
                let __pabitstring_off_1002 = __pabitstring_off_1002 + 2
                and __pabitstring_len_1003 = __pabitstring_len_1003 - 2 in
                (match __pabitstring_val_1009 with
-                | 2 when true ->
+                | 1|2 as c when true ->
                     if __pabitstring_len_1003 >= 16
                     then
                       let __pabitstring_val_1008 =
@@ -38,7 +38,7 @@ let _ =
                       and __pabitstring_len_1003 =
                         __pabitstring_len_1003 - 16 in
                       (match __pabitstring_val_1008 with
-                       | v when true ->
+                       | a when true ->
                            let p =
                              (__pabitstring_data_1001,
                                __pabitstring_off_1002,
@@ -56,25 +56,25 @@ let _ =
       else ();
       if __pabitstring_len_1003 >= 1
       then
-        (let __pabitstring_val_1013 =
+        (let __pabitstring_val_1015 =
            Bitstring.extract_bit __pabitstring_data_1001
              __pabitstring_off_1002 __pabitstring_len_1003 1 in
          let __pabitstring_off_1002 = __pabitstring_off_1002 + 1
          and __pabitstring_len_1003 = __pabitstring_len_1003 - 1 in
-         match __pabitstring_val_1013 with
+         match __pabitstring_val_1015 with
          | 0 when true ->
              if __pabitstring_len_1003 >= 2
              then
-               let __pabitstring_val_1012 =
+               let __pabitstring_val_1014 =
                  Bitstring.extract_char_unsigned __pabitstring_data_1001
                    __pabitstring_off_1002 __pabitstring_len_1003 2 in
                let __pabitstring_off_1002 = __pabitstring_off_1002 + 2
                and __pabitstring_len_1003 = __pabitstring_len_1003 - 2 in
-               (match __pabitstring_val_1012 with
-                | 1 when true ->
+               (match __pabitstring_val_1014 with
+                | 1|2 when true ->
                     if __pabitstring_len_1003 >= 16
                     then
-                      let __pabitstring_val_1011 =
+                      let __pabitstring_val_1013 =
                         Bitstring.extract_int_be_unsigned
                           __pabitstring_data_1001 __pabitstring_off_1002
                           __pabitstring_len_1003 16 in
@@ -82,17 +82,49 @@ let _ =
                         __pabitstring_off_1002 + 16
                       and __pabitstring_len_1003 =
                         __pabitstring_len_1003 - 16 in
-                      (match __pabitstring_val_1011 with
-                       | v when true ->
-                           let p =
-                             (__pabitstring_data_1001,
-                               __pabitstring_off_1002,
-                               __pabitstring_len_1003) in
-                           let __pabitstring_off_1002 =
-                             __pabitstring_off_1002 + __pabitstring_len_1003 in
-                           let __pabitstring_len_1003 = 0 in
-                           (__pabitstring_result_1007 := (Some (Some p));
-                            raise Exit)
+                      (match __pabitstring_val_1013 with
+                       | a when true ->
+                           if __pabitstring_len_1003 >= 16
+                           then
+                             let __pabitstring_val_1012 =
+                               Bitstring.extract_int_ee_unsigned a
+                                 __pabitstring_data_1001
+                                 __pabitstring_off_1002
+                                 __pabitstring_len_1003 16 in
+                             let __pabitstring_off_1002 =
+                               __pabitstring_off_1002 + 16
+                             and __pabitstring_len_1003 =
+                               __pabitstring_len_1003 - 16 in
+                             (match __pabitstring_val_1012 with
+                              | b when true ->
+                                  if __pabitstring_len_1003 >= 16
+                                  then
+                                    let __pabitstring_val_1011 =
+                                      Bitstring.extract_int_ee_unsigned a
+                                        __pabitstring_data_1001
+                                        __pabitstring_off_1002
+                                        __pabitstring_len_1003 16 in
+                                    let __pabitstring_off_1002 =
+                                      __pabitstring_off_1002 + 16
+                                    and __pabitstring_len_1003 =
+                                      __pabitstring_len_1003 - 16 in
+                                    (match __pabitstring_val_1011 with
+                                     | _ when true ->
+                                         let p =
+                                           (__pabitstring_data_1001,
+                                             __pabitstring_off_1002,
+                                             __pabitstring_len_1003) in
+                                         let __pabitstring_off_1002 =
+                                           __pabitstring_off_1002 +
+                                             __pabitstring_len_1003 in
+                                         let __pabitstring_len_1003 = 0 in
+                                         (__pabitstring_result_1007 :=
+                                            (Some (Some p));
+                                          raise Exit)
+                                     | _ -> ())
+                                  else ()
+                              | _ -> ())
+                           else ()
                        | _ -> ())
                     else ()
                 | _ -> ())
