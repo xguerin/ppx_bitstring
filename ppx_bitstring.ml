@@ -49,13 +49,22 @@ let empty = {
   set_offset_at = None;
 }
 
+let default = {
+  value_type    = Some Type.Int;
+  sign          = Some Sign.Unsigned;
+  endian        = Some Endian.Big;
+  check         = None;
+  bind          = None;
+  set_offset_at = None;
+}
+
 (* Helper functions *)
 
 let mksym =
   let i = ref 1000 in
   fun name ->
     incr i; let i = !i in
-    sprintf "__pabitstring_%s_%d" name i
+    sprintf "__ppxbitstring_%s_%d" name i
 
 let mkpatvar name =
   Parse.pattern (Lexing.from_string name)
@@ -69,95 +78,149 @@ let process_qual state q =
   match q with
   | [%expr int] ->
       begin match state.value_type with
-      | Some v -> Result.Error "Value type can only be defined once"
-      | None -> Result.Ok { state with value_type = Some Type.Int }
+      | Some v -> failwith "Value type can only be defined once"
+      | None -> { state with value_type = Some Type.Int }
       end
   | [%expr string] ->
       begin match state.value_type with
-      | Some v -> Result.Error "Value type can only be defined once"
-      | None -> Result.Ok { state with value_type = Some Type.String }
+      | Some v -> failwith "Value type can only be defined once"
+      | None -> { state with value_type = Some Type.String }
       end
   | [%expr bitstring] ->
       begin match state.value_type with
-      | Some v -> Result.Error "Value type can only be defined once"
-      | None -> Result.Ok { state with value_type = Some Type.Bitstring }
+      | Some v -> failwith "Value type can only be defined once"
+      | None -> { state with value_type = Some Type.Bitstring }
       end
   | [%expr signed] ->
       begin match state.sign with
-      | Some v -> Result.Error "Signedness can only be defined once"
-      | None -> Result.Ok { state with sign = Some Sign.Signed }
+      | Some v -> failwith "Signedness can only be defined once"
+      | None -> { state with sign = Some Sign.Signed }
       end
   | [%expr unsigned] ->
       begin match state.sign with
-      | Some v -> Result.Error "Signedness can only be defined once"
-      | None -> Result.Ok { state with sign = Some Sign.Unsigned }
+      | Some v -> failwith "Signedness can only be defined once"
+      | None -> { state with sign = Some Sign.Unsigned }
       end
   | [%expr littleendian] ->
       begin match state.endian with
-      | Some v -> Result.Error "Endianness can only be defined once"
-      | None -> Result.Ok { state with endian = Some Endian.Little }
+      | Some v -> failwith "Endianness can only be defined once"
+      | None -> { state with endian = Some Endian.Little }
       end
   | [%expr bigendian] ->
       begin match state.endian with
-      | Some v -> Result.Error "Endianness can only be defined once"
-      | None -> Result.Ok { state with endian = Some Endian.Big }
+      | Some v -> failwith "Endianness can only be defined once"
+      | None -> { state with endian = Some Endian.Big }
       end
   | [%expr nativeendian] ->
       begin match state.endian with
-      | Some v -> Result.Error "Endianness can only be defined once"
-      | None -> Result.Ok { state with endian = Some Endian.Native }
+      | Some v -> failwith "Endianness can only be defined once"
+      | None -> { state with endian = Some Endian.Native }
       end
   | [%expr endian [%e? sub]] ->
       begin match state.endian with
-      | Some v -> Result.Error "Endianness can only be defined once"
-      | None -> Result.Ok { state with endian = Some (Endian.Referred sub) }
+      | Some v -> failwith "Endianness can only be defined once"
+      | None -> { state with endian = Some (Endian.Referred sub) }
       end
   | [%expr bind [%e? sub]] ->
       begin match state.check with
-      | Some v -> Result.Error "Check expression can only be defined once"
-      | None -> Result.Ok { state with check = Some sub }
+      | Some v -> failwith "Check expression can only be defined once"
+      | None -> { state with check = Some sub }
       end
   | [%expr check [%e? sub]] ->
       begin match state.bind with
-      | Some v -> Result.Error "Bind expression can only be defined once"
-      | None -> Result.Ok { state with bind = Some sub }
+      | Some v -> failwith "Bind expression can only be defined once"
+      | None -> { state with bind = Some sub }
       end
   | [%expr set_offset_at [%e? sub]] ->
       begin match state.set_offset_at with
-      | Some v -> Result.Error "Offset expression can only be defined once"
-      | None -> Result.Ok { state with set_offset_at = Some sub }
+      | Some v -> failwith "Offset expression can only be defined once"
+      | None -> { state with set_offset_at = Some sub }
       end
-  | _ -> Result.Error ("Invalid qualifier: " ^ (Pprintast.string_of_expression q))
+  | _ -> failwith ("Invalid qualifier: " ^ (Pprintast.string_of_expression q))
 
 let parse_quals str =
-  try
-    let expr = Parse.expression (Lexing.from_string str) in
-    let rec process_quals state = function
-      | [] -> Result.Ok state
-      | hd :: tl ->
-          begin match process_qual state hd with
-          | Result.Ok state -> process_quals state tl
-          | Result.Error e -> Result.Error e
-          end
-    in match expr with
-    (* single named qualifiers *)
-    | { pexp_desc = Pexp_ident (_) } -> process_qual empty expr
-    (* single functional qualifiers *)
-    | { pexp_desc = Pexp_apply (_, _) } -> process_qual empty expr
-    (* multiple qualifiers *)
-    | { pexp_desc = Pexp_tuple (elements) } -> process_quals empty elements
-    | _ -> Result.Error ("Format error: " ^ str)
-  with
-  | Syntaxerr.Error _ -> Result.Error ("Syntax error: " ^ str)
+  let expr = Parse.expression (Lexing.from_string str) in
+  let rec process_quals state = function
+    | [] -> state
+    | hd :: tl -> process_quals (process_qual state hd) tl
+  in match expr with
+  (* single named qualifiers *)
+  | { pexp_desc = Pexp_ident (_) } -> process_qual empty expr
+  (* single functional qualifiers *)
+  | { pexp_desc = Pexp_apply (_, _) } -> process_qual empty expr
+  (* multiple qualifiers *)
+  | { pexp_desc = Pexp_tuple (elements) } -> process_quals empty elements
+  | _ -> failwith ("Format error: " ^ str)
 
 (* Processing expression *)
 
+let rec evaluate_expr = function
+  | { pexp_desc =
+      Pexp_apply ({ pexp_desc = Pexp_ident ({ txt; _ }); _ }, [ (_, lhs); (_, rhs) ] ) } ->
+      let elhs = evaluate_expr lhs and erhs = evaluate_expr rhs in
+      begin match txt with
+      | Lident ("+") ->
+          begin match elhs, erhs with
+          | Some l, Some r -> Some (l + r)
+          | _ -> None
+          end
+      | Lident ("-") ->
+          begin match elhs, erhs with
+          | Some l, Some r -> Some (l - r)
+          | _ -> None
+          end
+      | Lident ("*") ->
+          begin match elhs, erhs with
+          | Some l, Some r -> Some (l * r)
+          | _ -> None
+          end
+      | Lident ("/") ->
+          begin match elhs, erhs with
+          | Some l, Some r -> Some (l / r)
+          | _ -> None
+          end
+      | Lident ("land") ->
+          begin match elhs, erhs with
+          | Some l, Some r -> Some (l land r)
+          | _ -> None
+          end
+      | Lident ("lor") ->
+          begin match elhs, erhs with
+          | Some l, Some r -> Some (l lor r)
+          | _ -> None
+          end
+      | Lident ("lxor") ->
+          begin match elhs, erhs with
+          | Some l, Some r -> Some (l lxor r)
+          | _ -> None
+          end
+      | Lident ("lsr") ->
+          begin match elhs, erhs with
+          | Some l, Some r -> Some (l lsr r)
+          | _ -> None
+          end
+      | Lident ("asr") ->
+          begin match elhs, erhs with
+          | Some l, Some r -> Some (l asr r)
+          | _ -> None
+          end
+      | Lident ("mod") ->
+          begin match elhs, erhs with
+          | Some l, Some r -> Some (l mod r)
+          | _ -> None
+          end
+      | _ -> None
+      end
+  | { pexp_desc = Pexp_constant (const) } ->
+      begin match const with
+      | Const_int i -> Some i
+      | _ -> None
+      end
+  | _ ->
+      None
+
 let parse_expr str =
-  try
-    let expr = Parse.expression (Lexing.from_string str) in
-    Result.Ok expr
-  with
-  | Syntaxerr.Error _ -> Result.Error ("Syntax error: " ^ str)
+  Parse.expression (Lexing.from_string str)
 
 (* Processing pattern *)
 
@@ -196,12 +259,9 @@ let pattern_lifter =
   end
 
 let parse_pattern str =
-  try
     let pat = Parse.pattern (Lexing.from_string str) in
-    if pattern_lifter#lift_Parsetree_pattern (pat) then Result.Ok pat
-    else Result.Error ("Format error: " ^ str)
-  with
-  | Syntaxerr.Error _ -> Result.Error ("Syntax error: " ^ str)
+    if pattern_lifter#lift_Parsetree_pattern (pat) then pat
+    else failwith ("Format error: " ^ str)
 
 (* Parsing fields *)
 
@@ -209,78 +269,108 @@ let parse_fields str =
   let e = List.fold_right ~init:[] ~f:(fun e acc -> [Bytes.trim e] @ acc) (String.split ~on:':' str) in
   match e with
   | [ "_" as pat ] ->
-      begin match parse_pattern pat with
-      | Result.Ok p -> Result.Ok (p, None, None)
-      | Result.Error e -> Result.Error e
-      end
+      (parse_pattern pat, None, None)
   | [ pat; len ] ->
-      begin match parse_pattern pat with
-      | Result.Ok p ->
-          begin match parse_expr len with
-          | Result.Ok l -> Result.Ok (p, Some l, None)
-          | Result.Error e -> Result.Error e
-          end
-        | Result.Error e -> Result.Error e
-      end
+      (parse_pattern pat, Some (parse_expr len), Some default)
   | [ pat; len; quals ] ->
-      begin match parse_pattern pat with
-      | Result.Ok p ->
-          begin match parse_expr len with
-          | Result.Ok l ->
-              begin match parse_quals quals with
-              | Result.Ok q -> Result.Ok (p, Some l, Some q)
-              | Result.Error e -> Result.Error e
-              end
-          | Result.Error e -> Result.Error e
-          end
-        | Result.Error e -> Result.Error e
-      end
-  | _ -> Result.Error ("Format error: " ^ str)
+      (parse_pattern pat, Some (parse_expr len), Some (parse_quals quals))
+  | _ -> failwith ("Format error: " ^ str)
 
 (* Generators *)
 
-let rec generate_fields (dat, off, len) beh = function
-  | [] -> Result.Ok beh
-  | hd :: tl ->
-      begin match parse_fields hd with
-      | Result.Ok (p, None, None) ->
-          generate_fields (dat, off, len) beh tl
-      | Result.Ok (p, Some l, q) ->
-          let vl = mksym "value" and offNN = mksym "off" and lenNN = mksym "len" in
-          begin match generate_fields (dat, off, len) beh tl with
-          | Result.Ok next ->
-              Result.Ok [%expr
-                if [%e (mkident len)] >= [%e l] then
-                  let [%p (mkpatvar vl)] = 0
-                  and [%p (mkpatvar offNN)] = [%e (mkident off)] + [%e l]
-                  and [%p (mkpatvar lenNN)] = [%e (mkident len)] - [%e l]
-                  in match [%e (mkident vl)] with
-                  | [%p p] when true -> [%e next]
-                  | _ -> ()]
-          | Result.Error e -> Result.Error e
-          end
-      | Result.Ok (_, _, _) -> Result.Error "Invalid format"
-      | Result.Error e -> Result.Error e
-      end
+let check_field_len (l, q) =
+  let open Option.Monad_infix in
+  match q.value_type with
+  | Some (Type.String) ->
+      evaluate_expr l >>= fun v ->
+        if v < -1 || (v > 0 && (v mod 8) <> 0) then
+          failwith "length of string must be > 0 and multiple of 8, or the special value -1"
+        else Some v
+  | Some (Type.Bitstring) ->
+      evaluate_expr l >>= fun v ->
+        if v < -1 then failwith "length of bitstring must be >= 0 or the special value -1"
+        else Some v
+  | Some (Type.Int) ->
+      evaluate_expr l >>= fun v ->
+        if v < 1 || v > 64 then failwith "length of int field must be [1..64]"
+        else Some v
+  | None -> failwith "No type to check"
 
-let generate_case (dat, off, len) case =
-  match case.pc_lhs.ppat_desc with
-  | Ppat_constant pattern ->
-      begin match pattern with
-      | Const_string (value, _) ->
-          let fields = String.split ~on:';' value in
-          generate_fields (dat, off, len) case.pc_rhs fields
-      | _ -> Result.Error "Wrong pattern type in bitmatch case"
+let generate_field (dat, res, off, len) (p, l, q) next =
+  match check_field_len (l, q), q.value_type with
+  | Some (-1), Some (Type.Bitstring) ->
+      begin match p with
+      | { ppat_desc = Ppat_var(_) } ->
+          [%expr
+          let [%p p] = ([%e (mkident dat)], [%e (mkident off)], [%e (mkident len)]) in
+          [%e next]]
+      | { ppat_desc = Ppat_any } -> next
+      | _ -> failwith "Bistring can only be assigned to variables or skipped"
       end
-    | _ -> Result.Error "Wrong pattern type in bitmatch case"
+  | Some (_), Some (Type.Bitstring) ->
+      let offN = mksym "off" and lenN = mksym "len" in
+      let body = [%expr
+        let [%p (mkpatvar offN)] = [%e (mkident off)] + [%e l]
+        and [%p (mkpatvar lenN)] = [%e (mkident len)] - [%e l]
+        in [%e next]]
+      in
+      begin match p with
+      | { ppat_desc = Ppat_var(_) } ->
+          [%expr
+          let [%p p] = ([%e (mkident dat)], [%e (mkident off)], [%e (mkident len)]) in
+          [%e body]]
+      | { ppat_desc = Ppat_any } -> body
+      | _ -> failwith "Bistring can only be assigned to variables or skipped"
+      end
+  | Some (-1), Some (Type.String) ->
+      begin match p with
+      | { ppat_desc = Ppat_var(_) } ->
+          [%expr
+          let [%p p] = ([%e (mkident dat)], [%e (mkident off)], [%e (mkident len)]) in
+          [%e next]]
+      | { ppat_desc = Ppat_any } -> next
+      | _ -> failwith "Bistring can only be assigned to variables or skipped"
+      end
+  | Some (_), Some (Type.String) ->
+      let valN = mksym "value" and offN = mksym "off" and lenN = mksym "len" in
+      [%expr
+      let [%p (mkpatvar valN)] = 0 in
+      let [%p (mkpatvar offN)] = [%e (mkident off)] + [%e l]
+      and [%p (mkpatvar lenN)] = [%e (mkident len)] - [%e l]
+      in match [%e (mkident valN)] with
+      | [%p p] when true -> [%e next]
+      | _ -> ()]
+  | field_len, Some (_) ->
+      let valN = mksym "value" and offN = mksym "off" and lenN = mksym "len" in
+      [%expr
+      if [%e (mkident len)] >= [%e l] then
+        let [%p (mkpatvar valN)] = 0 in
+        let [%p (mkpatvar offN)] = [%e (mkident off)] + [%e l]
+        and [%p (mkpatvar lenN)] = [%e (mkident len)] - [%e l]
+        in match [%e (mkident valN)] with
+      | [%p p] when true -> [%e next]
+        | _ -> ()]
+  | _, None -> failwith "No type to generate"
+
+let generate_case (dat, res, off, len) case =
+  match case.pc_lhs.ppat_desc with
+  | Ppat_constant (Const_string (value, _)) ->
+      let beh = [%expr [%e (mkident res)] := Some ([%e case.pc_rhs]); raise Exit] in
+      List.map ~f:(fun flds -> parse_fields flds) (String.split ~on:';' value)
+      |> List.fold_right ~init:beh ~f:(fun e acc ->
+          match e with
+          | (p, None, None) -> beh
+          | (p, Some l, Some q) -> generate_field (dat, res, off, len) (p, l, q) acc
+          | _ -> failwith "Wrong pattern type in bitmatch case")
+    | _ -> failwith "Wrong pattern type in bitmatch case"
 
 let generate_cases ident cases =
-  let datN = mksym "data" and offN = mksym "off" and lenN = mksym "len" in
+  let datN = mksym "data" and resN = mksym "result" in
+  let offN = mksym "off" and lenN = mksym "len" in
   let offNN = mksym "off" and lenNN = mksym "len" in
-  let stmts = List.fold ~init:[] ~f:(fun acc case ->
-    match generate_case (datN, offNN, lenNN) case with
-    | Result.Ok v -> acc @ [v]
-    | Result.Error r -> failwith r) cases
+  let stmts = List.fold ~init:[]
+    ~f:(fun acc case -> acc @ [ generate_case (datN, resN, offNN, lenNN) case ])
+    cases
   in
   let rec build_seq = function
     | [] -> failwith "Empty case list"
@@ -293,7 +383,13 @@ let generate_cases ident cases =
     let [%p tuple] = [%e ident] in
     let [%p (mkpatvar offNN)] = [%e (mkident offN)]
     and [%p (mkpatvar lenNN)] = [%e (mkident lenN)]
-    in [%e seq]]
+    in
+    let [%p (mkpatvar resN)] = ref None in
+    (try [%e seq];
+    with | Exit -> ());
+    match ![%e (mkident resN)] with
+    | Some x -> x
+    | None -> raise (Match_failure ("", 0, 0))]
 
 let getenv_mapper argv =
   (* Our getenv_mapper only overrides the handling of expressions in the default mapper. *)
