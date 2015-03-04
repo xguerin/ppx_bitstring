@@ -155,60 +155,54 @@ let parse_quals str =
 (* Processing expression *)
 
 let rec evaluate_expr = function
-  | { pexp_desc =
-      Pexp_apply ({ pexp_desc = Pexp_ident ({ txt; _ }); _ }, [ (_, lhs); (_, rhs) ] ) } ->
-      let elhs = evaluate_expr lhs and erhs = evaluate_expr rhs in
-      begin match txt with
-      | Lident ("+") ->
-          begin match elhs, erhs with
-          | Some l, Some r -> Some (l + r)
-          | _ -> None
-          end
-      | Lident ("-") ->
-          begin match elhs, erhs with
-          | Some l, Some r -> Some (l - r)
-          | _ -> None
-          end
-      | Lident ("*") ->
-          begin match elhs, erhs with
-          | Some l, Some r -> Some (l * r)
-          | _ -> None
-          end
-      | Lident ("/") ->
-          begin match elhs, erhs with
-          | Some l, Some r -> Some (l / r)
-          | _ -> None
-          end
-      | Lident ("land") ->
-          begin match elhs, erhs with
-          | Some l, Some r -> Some (l land r)
-          | _ -> None
-          end
-      | Lident ("lor") ->
-          begin match elhs, erhs with
-          | Some l, Some r -> Some (l lor r)
-          | _ -> None
-          end
-      | Lident ("lxor") ->
-          begin match elhs, erhs with
-          | Some l, Some r -> Some (l lxor r)
-          | _ -> None
-          end
-      | Lident ("lsr") ->
-          begin match elhs, erhs with
-          | Some l, Some r -> Some (l lsr r)
-          | _ -> None
-          end
-      | Lident ("asr") ->
-          begin match elhs, erhs with
-          | Some l, Some r -> Some (l asr r)
-          | _ -> None
-          end
-      | Lident ("mod") ->
-          begin match elhs, erhs with
-          | Some l, Some r -> Some (l mod r)
-          | _ -> None
-          end
+  | [%expr [%e? lhs] + [%e? rhs]] ->
+      begin match evaluate_expr lhs, evaluate_expr rhs with
+      | Some l, Some r -> Some (l + r)
+      | _ -> None
+      end
+  | [%expr [%e? lhs] - [%e? rhs]] ->
+      begin match evaluate_expr lhs, evaluate_expr rhs with
+      | Some l, Some r -> Some (l - r)
+      | _ -> None
+      end
+  | [%expr [%e? lhs] * [%e? rhs]] ->
+      begin match evaluate_expr lhs, evaluate_expr rhs with
+      | Some l, Some r -> Some (l * r)
+      | _ -> None
+      end
+  | [%expr [%e? lhs] / [%e? rhs]] ->
+      begin match evaluate_expr lhs, evaluate_expr rhs with
+      | Some l, Some r -> Some (l / r)
+      | _ -> None
+      end
+  | [%expr [%e? lhs] land [%e? rhs]] ->
+      begin match evaluate_expr lhs, evaluate_expr rhs with
+      | Some l, Some r -> Some (l land r)
+      | _ -> None
+      end
+  | [%expr [%e? lhs] lor [%e? rhs]] ->
+      begin match evaluate_expr lhs, evaluate_expr rhs with
+      | Some l, Some r -> Some (l lor r)
+      | _ -> None
+      end
+  | [%expr [%e? lhs] lxor [%e? rhs]] ->
+      begin match evaluate_expr lhs, evaluate_expr rhs with
+      | Some l, Some r -> Some (l lxor r)
+      | _ -> None
+      end
+  | [%expr [%e? lhs] lsr [%e? rhs]] ->
+      begin match evaluate_expr lhs, evaluate_expr rhs with
+      | Some l, Some r -> Some (l lsr r)
+      | _ -> None
+      end
+  | [%expr [%e? lhs] asr [%e? rhs]] ->
+      begin match evaluate_expr lhs, evaluate_expr rhs with
+      | Some l, Some r -> Some (l asr r)
+      | _ -> None
+      end
+  | [%expr [%e? lhs] mod [%e? rhs]] ->
+      begin match evaluate_expr lhs, evaluate_expr rhs with
+      | Some l, Some r -> Some (l mod r)
       | _ -> None
       end
   | { pexp_desc = Pexp_constant (const) } ->
