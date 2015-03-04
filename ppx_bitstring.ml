@@ -31,32 +31,44 @@ module Endian = struct
     | Referred of Parsetree.expression
 end
 
-type t = {
-  value_type    : Type.t option;
-  sign          : Sign.t option;
-  endian        : Endian.t option;
-  check         : Parsetree.expression option;
-  bind          : Parsetree.expression option;
-  set_offset_at : Parsetree.expression option;
-}
-
-let empty = {
-  value_type    = None;
-  sign          = None;
-  endian        = None;
-  check         = None;
-  bind          = None;
-  set_offset_at = None;
-}
-
-let default = {
-  value_type    = Some Type.Int;
-  sign          = Some Sign.Unsigned;
-  endian        = Some Endian.Big;
-  check         = None;
-  bind          = None;
-  set_offset_at = None;
-}
+module Qualifiers = struct
+  type t = {
+    value_type    : Type.t option;
+    sign          : Sign.t option;
+    endian        : Endian.t option;
+    check         : Parsetree.expression option;
+    bind          : Parsetree.expression option;
+    set_offset_at : Parsetree.expression option;
+  }
+  let empty = {
+    value_type    = None;
+    sign          = None;
+    endian        = None;
+    check         = None;
+    bind          = None;
+    set_offset_at = None;
+  }
+  let default = {
+    value_type    = Some Type.Int;
+    sign          = Some Sign.Unsigned;
+    endian        = Some Endian.Big;
+    check         = None;
+    bind          = None;
+    set_offset_at = None;
+  }
+  let set_defaults v =
+    let chk_value q =
+      if q.value_type = None then { q with value_type = Some Type.Int }
+      else q
+    and chk_sign q =
+      if q.sign = None then { q with sign = Some Sign.Unsigned }
+      else q
+    and chk_endian q =
+      if q.endian = None then { q with endian = Some Endian.Big }
+      else q
+    in
+    v |> chk_value |> chk_sign |> chk_endian
+end
 
 (* Helper functions *)
 
@@ -75,6 +87,7 @@ let mkident name =
 (* Processing qualifiers *)
 
 let process_qual state q =
+  let open Qualifiers in
   match q with
   | [%expr int] ->
       begin match state.value_type with
@@ -145,11 +158,11 @@ let parse_quals str =
     | hd :: tl -> process_quals (process_qual state hd) tl
   in match expr with
   (* single named qualifiers *)
-  | { pexp_desc = Pexp_ident (_) } -> process_qual empty expr
+  | { pexp_desc = Pexp_ident (_) } -> process_qual Qualifiers.empty expr
   (* single functional qualifiers *)
-  | { pexp_desc = Pexp_apply (_, _) } -> process_qual empty expr
+  | { pexp_desc = Pexp_apply (_, _) } -> process_qual Qualifiers.empty expr
   (* multiple qualifiers *)
-  | { pexp_desc = Pexp_tuple (elements) } -> process_quals empty elements
+  | { pexp_desc = Pexp_tuple (elements) } -> process_quals Qualifiers.empty elements
   | _ -> failwith ("Format error: " ^ str)
 
 (* Processing expression *)
@@ -265,16 +278,16 @@ let parse_fields str =
   | [ "_" as pat ] ->
       (parse_pattern pat, None, None)
   | [ pat; len ] ->
-      (parse_pattern pat, Some (parse_expr len), Some default)
+      (parse_pattern pat, Some (parse_expr len), Some Qualifiers.default)
   | [ pat; len; quals ] ->
-      (parse_pattern pat, Some (parse_expr len), Some (parse_quals quals))
+      (parse_pattern pat, Some (parse_expr len), Some (Qualifiers.set_defaults (parse_quals quals)))
   | _ -> failwith ("Format error: " ^ str)
 
 (* Generators *)
 
 let check_field_len (l, q) =
   let open Option.Monad_infix in
-  match q.value_type with
+  match q.Qualifiers.value_type with
   | Some (Type.String) ->
       evaluate_expr l >>= fun v ->
         if v < -1 || (v > 0 && (v mod 8) <> 0) then
@@ -290,72 +303,64 @@ let check_field_len (l, q) =
         else Some v
   | None -> failwith "No type to check"
 
-let generate_field (dat, res, off, len) (p, l, q) next =
-  match check_field_len (l, q), q.value_type with
-  | Some (-1), Some (Type.Bitstring) ->
-      begin match p with
-      | { ppat_desc = Ppat_var(_) } ->
-          [%expr
-          let [%p p] = ([%e (mkident dat)], [%e (mkident off)], [%e (mkident len)]) in
-          [%e next]]
-      | { ppat_desc = Ppat_any } -> next
-      | _ -> failwith "Bistring can only be assigned to variables or skipped"
-      end
-  | Some (_), Some (Type.Bitstring) ->
-      let offN = mksym "off" and lenN = mksym "len" in
-      let body = [%expr
+let rec generate_fields (dat, res, off, len) behavior fields =
+  let open Qualifiers in
+  let offN = mksym "off" and lenN = mksym "len" in
+  match fields with
+  | [] -> behavior
+  | (p, None, None) :: tl -> behavior
+  | (p, Some l, Some q) :: tl ->
+      let process rem = [%expr
         let [%p (mkpatvar offN)] = [%e (mkident off)] + [%e l]
         and [%p (mkpatvar lenN)] = [%e (mkident len)] - [%e l]
-        in [%e next]]
+        in [%e (generate_fields (dat, res, offN, lenN) behavior rem)]]
+      and process_all rem = [%expr
+        let [%p (mkpatvar offN)] = [%e (mkident off)] + [%e (mkident len)]
+        and [%p (mkpatvar lenN)] = 0
+        in [%e (generate_fields (dat, res, offN, lenN) behavior rem)]]
       in
-      begin match p with
-      | { ppat_desc = Ppat_var(_) } ->
+      begin match check_field_len (l, q), q.value_type with
+      | Some (-1), Some (Type.Bitstring) ->
+          begin match p with
+          | { ppat_desc = Ppat_var(_) } ->
+              [%expr let [%p p] = ([%e (mkident dat)], [%e (mkident off)], [%e (mkident len)]) in
+              [%e (process_all tl)]]
+          | { ppat_desc = Ppat_any } -> process_all tl
+          | _ -> failwith "A bitstring can only be assigned to a variable or skipped"
+          end
+      | Some (_), Some (Type.Bitstring) ->
+          begin match p with
+          | { ppat_desc = Ppat_var(_) } ->
+              [%expr let [%p p] = ([%e (mkident dat)], [%e (mkident off)], [%e (mkident len)]) in
+              [%e (process tl)]]
+          | { ppat_desc = Ppat_any } -> process tl
+          | _ -> failwith "Bistring can only be assigned to variables or skipped"
+          end
+      | Some (-1), Some (Type.String) ->
+          begin match p with
+          | { ppat_desc = Ppat_var(_) } ->
+              [%expr let [%p p] = ([%e (mkident dat)], [%e (mkident off)], [%e (mkident len)]) in
+              [%e (process_all tl)]]
+          | { ppat_desc = Ppat_any } -> process_all tl
+          | _ -> failwith "Bistring can only be assigned to variables or skipped"
+          end
+      | Some (_), Some (_) ->
+          let valN = mksym "value" in
           [%expr
-          let [%p p] = ([%e (mkident dat)], [%e (mkident off)], [%e (mkident len)]) in
-          [%e body]]
-      | { ppat_desc = Ppat_any } -> body
-      | _ -> failwith "Bistring can only be assigned to variables or skipped"
+          let [%p (mkpatvar valN)] = 0 in
+          match [%e (mkident valN)] with
+          | [%p p] when true -> [%e (process tl)]
+          | _ -> ()]
+      | _, _ -> failwith "No type to generate"
       end
-  | Some (-1), Some (Type.String) ->
-      begin match p with
-      | { ppat_desc = Ppat_var(_) } ->
-          [%expr
-          let [%p p] = ([%e (mkident dat)], [%e (mkident off)], [%e (mkident len)]) in
-          [%e next]]
-      | { ppat_desc = Ppat_any } -> next
-      | _ -> failwith "Bistring can only be assigned to variables or skipped"
-      end
-  | Some (_), Some (Type.String) ->
-      let valN = mksym "value" and offN = mksym "off" and lenN = mksym "len" in
-      [%expr
-      let [%p (mkpatvar valN)] = 0 in
-      let [%p (mkpatvar offN)] = [%e (mkident off)] + [%e l]
-      and [%p (mkpatvar lenN)] = [%e (mkident len)] - [%e l]
-      in match [%e (mkident valN)] with
-      | [%p p] when true -> [%e next]
-      | _ -> ()]
-  | field_len, Some (_) ->
-      let valN = mksym "value" and offN = mksym "off" and lenN = mksym "len" in
-      [%expr
-      if [%e (mkident len)] >= [%e l] then
-        let [%p (mkpatvar valN)] = 0 in
-        let [%p (mkpatvar offN)] = [%e (mkident off)] + [%e l]
-        and [%p (mkpatvar lenN)] = [%e (mkident len)] - [%e l]
-        in match [%e (mkident valN)] with
-      | [%p p] when true -> [%e next]
-        | _ -> ()]
-  | _, None -> failwith "No type to generate"
+  | _ -> failwith "Wrong pattern type in bitmatch case"
 
 let generate_case (dat, res, off, len) case =
   match case.pc_lhs.ppat_desc with
   | Ppat_constant (Const_string (value, _)) ->
       let beh = [%expr [%e (mkident res)] := Some ([%e case.pc_rhs]); raise Exit] in
       List.map ~f:(fun flds -> parse_fields flds) (String.split ~on:';' value)
-      |> List.fold_right ~init:beh ~f:(fun e acc ->
-          match e with
-          | (p, None, None) -> beh
-          | (p, Some l, Some q) -> generate_field (dat, res, off, len) (p, l, q) acc
-          | _ -> failwith "Wrong pattern type in bitmatch case")
+      |> generate_fields (dat, res, off, len) beh
     | _ -> failwith "Wrong pattern type in bitmatch case"
 
 let generate_cases ident cases =

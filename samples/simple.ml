@@ -7,7 +7,7 @@ let decode v =
   | {| 1 : 1;
       (1 | 2) as c : 2;
       a : 16 : bigendian, int;
-      m : 16 : bitstring;
+      m : 16 : endian (a);
       s : -1 : string;
       p : -1 : bitstring
     |} -> Some p
