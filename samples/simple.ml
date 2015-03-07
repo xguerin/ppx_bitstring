@@ -8,7 +8,7 @@ let decode v =
       (1 | 2) as c : 2;
       a : 16 : bigendian, int;
       m : size : endian (a), check (m > 10);
-      s : -1 : string;
+      s : -1 : string, save_offset_to (hello);
       p : -1 : bitstring
     |} -> Some p
   | {| a : 16 : bigendian, int;

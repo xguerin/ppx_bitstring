@@ -32,28 +32,28 @@ end
 
 module Qualifiers = struct
   type t = {
-    value_type    : Type.t option;
-    sign          : Sign.t option;
-    endian        : Endian.t option;
-    check         : Parsetree.expression option;
-    bind          : Parsetree.expression option;
-    set_offset_at : Parsetree.expression option;
+    value_type      : Type.t option;
+    sign            : Sign.t option;
+    endian          : Endian.t option;
+    check           : Parsetree.expression option;
+    bind            : Parsetree.expression option;
+    save_offset_to  : Parsetree.expression option;
   }
   let empty = {
-    value_type    = None;
-    sign          = None;
-    endian        = None;
-    check         = None;
-    bind          = None;
-    set_offset_at = None;
+    value_type      = None;
+    sign            = None;
+    endian          = None;
+    check           = None;
+    bind            = None;
+    save_offset_to  = None;
   }
   let default = {
-    value_type    = Some Type.Int;
-    sign          = Some Sign.Unsigned;
-    endian        = Some Endian.Big;
-    check         = None;
-    bind          = None;
-    set_offset_at = None;
+    value_type      = Some Type.Int;
+    sign            = Some Sign.Unsigned;
+    endian          = Some Endian.Big;
+    check           = None;
+    bind            = None;
+    save_offset_to  = None;
   }
   let set_defaults v =
     let chk_value q =
@@ -143,10 +143,10 @@ let process_qual state q =
       | Some v -> failwith "Check expression can only be defined once"
       | None -> { state with check = Some sub }
       end
-  | [%expr set_offset_at [%e? sub]] ->
-      begin match state.set_offset_at with
+  | [%expr save_offset_to [%e? sub]] ->
+      begin match state.save_offset_to with
       | Some v -> failwith "Offset expression can only be defined once"
-      | None -> { state with set_offset_at = Some sub }
+      | None -> { state with save_offset_to = Some sub }
       end
   | _ -> failwith ("Invalid qualifier: " ^ (Pprintast.string_of_expression q))
 
@@ -392,83 +392,106 @@ let generate_extractor (dat, off, len) (l, q) =
       end
   | _ -> failwith "Invalid type"
 
-let rec generate_next (dat, res, off, len) (p, l, q) behavior fields =
+let generate_value (dat, off, len) (l, q) =
+  let open Qualifiers in
+  match q.bind with
+  | Some b -> b
+  | None -> generate_extractor (dat, off, len) (l, q)
+
+let rec generate_next org_off (dat, off, len) (p, l, q) behavior fields =
   [%expr let [%p (mkpatvar off)] = [%e (mkident off)] + [%e l]
   and [%p (mkpatvar len)] = [%e (mkident len)] - [%e l] in
-  [%e (generate_fields (dat, res, off, len) behavior fields)]]
+  [%e (generate_fields org_off (dat, off, len) behavior fields)]]
 
-and generate_next_all (dat, res, off, len) behavior fields =
+and generate_next_all org_off (dat, off, len) behavior fields =
   [%expr let [%p (mkpatvar off)] = [%e (mkident off)] + [%e (mkident len)]
   and [%p (mkpatvar len)] = 0 in
-  [%e (generate_fields (dat, res, off, len) behavior fields)]]
+  [%e (generate_fields org_off (dat, off, len) behavior fields)]]
 
-and generate_match (dat, res, off, len) (p, l, q) behavior fields =
+and generate_match org_off (dat, off, len) (p, l, q) behavior fields =
   let open Qualifiers in
   let valN = mksym "value" in
   let m = match q.check with
   | Some chk ->
       [%expr begin match [%e (mkident valN)] with
-      | [%p p] when [%e chk] -> [%e (generate_fields (dat, res, off, len) behavior fields)]
+      | [%p p] when [%e chk] -> [%e (generate_fields org_off (dat, off, len) behavior fields)]
       | _ -> ()
       end]
   | None ->
       [%expr begin match [%e (mkident valN)] with
-      | [%p p] when true -> [%e (generate_fields (dat, res, off, len) behavior fields)]
+      | [%p p] when true -> [%e (generate_fields org_off (dat, off, len) behavior fields)]
       | _ -> ()
       end]
   in
-  [%expr let [%p (mkpatvar valN)] = [%e (generate_extractor (dat, off, len) (l, q))] in
+  [%expr let [%p (mkpatvar valN)] = [%e (generate_value (dat, off, len) (l, q))] in
   let [%p (mkpatvar off)] = [%e (mkident off)] + [%e l]
   and [%p (mkpatvar len)] = [%e (mkident len)] - [%e l] in [%e m]]
 
-and generate_fields (dat, res, off, len) behavior fields =
+and generate_offset_saver org_off (dat, off, len) (p, l, q) behavior =
+  let open Qualifiers in
+  match q.save_offset_to with
+  | Some { pexp_desc = Pexp_ident ({ txt; loc }) } -> [%expr
+      let [%p (mkpatvar (Longident.last txt))] = [%e (mkident off)] - [%e (mkident org_off)]
+      in [%e behavior]]
+  | Some _ | None -> behavior
+
+and generate_fields_with_quals org_off (dat, off, len) (p, l, q) behavior fields =
+  let open Qualifiers in
+  match check_field_len (l, q), q.value_type with
+  | Some (-1), Some (Type.Bitstring | Type.String) ->
+      begin match p with
+      | { ppat_desc = Ppat_var(_) } ->
+          generate_offset_saver org_off (dat, off, len) (p, l, q) [%expr
+          let [%p p] = [%e (generate_value (dat, off, len) (l, q))] in
+          [%e (generate_next_all org_off (dat, off, len) behavior fields)]]
+        | [%pat? _ ] ->
+          generate_offset_saver org_off (dat, off, len) (p, l, q) [%expr
+          [%e (generate_next_all org_off (dat, off, len) behavior fields)]]
+      | _ ->
+          failwith "Unbound string or bitstring can only be assigned to a variable or skipped"
+      end
+  | Some (_), Some (Type.Bitstring) ->
+      begin match p with
+      | { ppat_desc = Ppat_var(_) } ->
+          generate_offset_saver org_off (dat, off, len) (p, l, q) [%expr
+          if [%e (mkident len)] >= [%e l] then
+            let [%p p] = [%e (generate_value (dat, off, len) (l, q))] in
+            [%e (generate_next org_off (dat, off, len) (p, l, q) behavior fields)]
+          else ()]
+      | [%pat? _ ] ->
+          generate_offset_saver org_off (dat, off, len) (p, l, q) [%expr
+          if [%e (mkident len)] >= [%e l] then
+            [%e (generate_next org_off (dat, off, len) (p, l, q) behavior fields)]
+          else ()]
+      | _ -> failwith "Bound bitstring can only be assigned to variables or skipped"
+      end
+  | Some (_), Some (_) ->
+      generate_offset_saver org_off (dat, off, len) (p, l, q) [%expr
+      if [%e (mkident len)] >= [%e l] then
+      [%e (generate_match org_off (dat, off, len) (p, l, q) behavior fields)]
+      else ()]
+  | None, Some (_) ->
+      generate_offset_saver org_off (dat, off, len) (p, l, q) [%expr
+      if [%e l] >= 1 && [%e l] <= 64 && [%e (mkident len)] >= [%e l] then
+      [%e (generate_match org_off (dat, off, len) (p, l, q) behavior fields)]
+      else ()]
+  | _, _ -> failwith "No type to generate"
+
+and generate_fields org_off (dat, off, len) behavior fields =
   let open Qualifiers in
   match fields with
   | [] -> behavior
   | (p, None, None) :: tl -> behavior
   | (p, Some l, Some q) :: tl ->
-      begin match check_field_len (l, q), q.value_type with
-      | Some (-1), Some (Type.Bitstring | Type.String) ->
-          begin match p with
-          | { ppat_desc = Ppat_var(_) } ->
-              [%expr let [%p p] = [%e (generate_extractor (dat, off, len) (l, q))] in
-              [%e (generate_next_all (dat, res, off, len) behavior tl)]]
-            | [%pat? _ ] -> [%expr
-              [%e (generate_next_all (dat, res, off, len) behavior tl)]]
-          | _ ->
-              failwith "Unbound string or bitstring can only be assigned to a variable or skipped"
-          end
-      | Some (_), Some (Type.Bitstring) ->
-          begin match p with
-          | { ppat_desc = Ppat_var(_) } ->
-              [%expr if [%e (mkident len)] >= [%e l] then
-                let [%p p] = [%e (generate_extractor (dat, off, len) (l, q))] in
-                [%e (generate_next (dat, res, off, len) (p, l, q) behavior tl)]
-              else ()]
-          | [%pat? _ ] -> [%expr
-              if [%e (mkident len)] >= [%e l] then
-                [%e (generate_next (dat, res, off, len) (p, l, q) behavior tl)]
-              else ()]
-          | _ -> failwith "Bound bitstring can only be assigned to variables or skipped"
-          end
-      | Some (_), Some (_) ->
-          [%expr if [%e (mkident len)] >= [%e l] then
-          [%e (generate_match (dat, res, off, len) (p, l, q) behavior tl)]
-          else ()]
-      | None, Some (_) ->
-          [%expr if [%e l] >= 1 && [%e l] <= 64 && [%e (mkident len)] >= [%e l] then
-          [%e (generate_match (dat, res, off, len) (p, l, q) behavior tl)]
-          else ()]
-      | _, _ -> failwith "No type to generate"
-      end
+      generate_fields_with_quals org_off (dat, off, len) (p, l, q) behavior tl
   | _ -> failwith "Wrong pattern type in bitmatch case"
 
-let generate_case (dat, res, off, len) case =
+let generate_case org_off res (dat, off, len) case =
   match case.pc_lhs.ppat_desc with
   | Ppat_constant (Const_string (value, _)) ->
       let beh = [%expr [%e (mkident res)] := Some ([%e case.pc_rhs]); raise Exit] in
       List.map ~f:(fun flds -> parse_fields flds) (String.split ~on:';' value)
-      |> generate_fields (dat, res, off, len) beh
+      |> generate_fields org_off (dat, off, len) beh
     | _ -> failwith "Wrong pattern type in bitmatch case"
 
 let generate_cases ident cases =
@@ -477,7 +500,7 @@ let generate_cases ident cases =
   let offN = mksym "off" and lenN = mksym "len" in
   let algN = mksym "aligned" and resN = mksym "result" in
   let stmts = List.fold ~init:[]
-    ~f:(fun acc case -> acc @ [ generate_case (datN, resN, offNN, lenNN) case ])
+    ~f:(fun acc case -> acc @ [ generate_case offN resN (datN, offNN, lenNN) case ])
     cases
   in
   let rec build_seq = function

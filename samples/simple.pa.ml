@@ -9,7 +9,7 @@ let decode v =
       a : 16 : bigendian, int;
       b : size : nativeendian, int;
       m : 11 : endian (a), unsigned, check (m > 10);
-      s : -1 : string;
+      s : -1 : string, save_offset_to (hello);
       p : -1 : bitstring
     } -> Some p
   | { a : 16 : bigendian, int;

@@ -71,6 +71,9 @@ let _ =
                                      | m when true ->
                                          if m > 10
                                          then
+                                           let hello =
+                                             __pabitstring_off_1002 -
+                                               __pabitstring_original_off_1004 in
                                            let __pabitstring_str_1008 =
                                              Bitstring.string_of_bitstring
                                                (__pabitstring_data_1001,
