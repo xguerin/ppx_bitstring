@@ -1,6 +1,0 @@
-#!/bin/sh
-
-FLAGS="-cflag -thread -lflag -thread"
-PKGS="-pkgs core,compiler-libs.common,ppx_tools.metaquot"
-
-ocamlbuild -use-ocamlfind ${FLAGS} ${PKGS}  ppx_bitstring.native

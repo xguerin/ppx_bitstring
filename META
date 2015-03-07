@@ -1,0 +1,4 @@
+version = "0.1"
+description = "Bitstring PPX extension"
+requires = "bitstring"
+ppx = "./ppx_bitstring"

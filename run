@@ -1,3 +1,0 @@
-#!/bin/sh
-
-ocamlfind ocamlc -thread -ppx ./ppx_bitstring.native -package core,bitstring -dsource $1
