@@ -2,6 +2,7 @@ open Ast_helper
 open Ast_mapper
 open Asttypes
 open Core.Std
+open Format
 open Lexing
 open Longident
 open Parsetree
@@ -77,11 +78,22 @@ let mksym =
     incr i; let i = !i in
     sprintf "__ppxbitstring_%s_%d" name i
 
-let mkpatvar name =
-  Parse.pattern (Lexing.from_string name)
+let mkpatvar ~loc name =
+  { (Parse.pattern (Lexing.from_string name)) with ppat_loc = loc }
 
-let mkident name =
-  Parse.expression (Lexing.from_string name)
+let mkident ~loc name =
+  { (Parse.expression (Lexing.from_string name)) with pexp_loc = loc }
+
+let parse_expr ~loc str =
+  { (Parse.expression (Lexing.from_string str)) with pexp_loc = loc }
+
+let parse_pattern ~loc str =
+  { (Parse.pattern (Lexing.from_string str)) with ppat_loc = loc }
+
+(* Exception *)
+
+let location_exn ~loc msg =
+  Location.Error (Location.error ~loc msg)
 
 (* Processing qualifiers *)
 
@@ -150,8 +162,8 @@ let process_qual state q =
       end
   | _ -> failwith ("Invalid qualifier: " ^ (Pprintast.string_of_expression q))
 
-let parse_quals str =
-  let expr = Parse.expression (Lexing.from_string str) in
+let parse_quals ~loc str =
+  let expr = parse_expr ~loc str in
   let rec process_quals state = function
     | [] -> state
     | hd :: tl -> process_quals (process_qual state hd) tl
@@ -222,28 +234,19 @@ let rec evaluate_expr = function
       | Const_int i -> Some i
       | _ -> None
       end
-  | _ ->
-      None
-
-let parse_expr str =
-  Parse.expression (Lexing.from_string str)
-
-(* Processing pattern *)
-
-let parse_pattern str =
-  Parse.pattern (Lexing.from_string str)
+  | _ -> None
 
 (* Parsing fields *)
 
-let parse_fields str =
+let parse_fields ~loc str =
   let e = List.fold_right ~init:[] ~f:(fun e acc -> [Bytes.trim e] @ acc) (String.split ~on:':' str) in
   match e with
   | [ "_" as pat ] ->
-      (parse_pattern pat, None, None)
+      (parse_pattern ~loc pat, None, None)
   | [ pat; len ] ->
-      (parse_pattern pat, Some (parse_expr len), Some Qualifiers.default)
+      (parse_pattern ~loc pat, Some (parse_expr ~loc len), Some Qualifiers.default)
   | [ pat; len; quals ] ->
-      (parse_pattern pat, Some (parse_expr len), Some (Qualifiers.set_defaults (parse_quals quals)))
+      (parse_pattern ~loc pat, Some (parse_expr ~loc len), Some (Qualifiers.set_defaults (parse_quals ~loc quals)))
   | _ -> failwith ("Format error: " ^ str)
 
 (* Generators *)
@@ -266,235 +269,281 @@ let check_field_len (l, q) =
         else Some v
   | None -> failwith "No type to check"
 
-let generate_extractor (dat, off, len) (l, q) =
+let generate_extractor (dat, off, len) (l, q) loc =
   let open Qualifiers in
   match q.value_type with
-  | Some (Type.Bitstring) -> [%expr
-      ([%e (mkident dat)], [%e (mkident off)], [%e (mkident len)])]
-  | Some (Type.String) -> [%expr
-      (Bitstring.string_of_bitstring ([%e (mkident dat)] [%e (mkident off)] [%e (mkident len)]))]
+  | Some (Type.Bitstring) ->
+      [%expr ([%e (mkident ~loc dat)], [%e (mkident ~loc off)], [%e (mkident ~loc len)])]
+      [@metaloc loc]
+  | Some (Type.String) ->
+      [%expr (Bitstring.string_of_bitstring ([%e (mkident ~loc dat)] [%e (mkident ~loc off)] [%e (mkident ~loc len)]))]
+      [@metaloc loc]
   | Some (Type.Int) ->
       begin match (evaluate_expr l), q.sign, q.endian with
       (* 1-bit type *)
       | Some (size), Some (_), Some (_) when size = 1 ->
-          [%expr (Bitstring.extract_bit
-          [%e (mkident dat)] [%e (mkident off)] [%e (mkident len)] [%e l])]
+          [%expr if (Bitstring.extract_bit [%e (mkident ~loc dat)] [%e (mkident ~loc off)]
+          [%e (mkident ~loc len)] [%e l]) then 1 else 0]
+          [@metaloc loc]
       (* 8-bit type *)
       | Some (size), Some (Sign.Signed), Some (_) when size >= 2 && size <= 8 ->
           [%expr (Bitstring.extract_char_signed
-          [%e (mkident dat)] [%e (mkident off)] [%e (mkident len)] [%e l])]
+          [%e (mkident ~loc dat)] [%e (mkident ~loc off)] [%e (mkident ~loc len)] [%e l])]
+          [@metaloc loc]
       | Some (size), Some (Sign.Unsigned), Some (_) when size >= 2 && size <= 8 ->
           [%expr (Bitstring.extract_char_unsigned
-          [%e (mkident dat)] [%e (mkident off)] [%e (mkident len)] [%e l])]
+          [%e (mkident ~loc dat)] [%e (mkident ~loc off)] [%e (mkident ~loc len)] [%e l])]
+          [@metaloc loc]
       (* 16-bit type *)
       | Some (size), Some (Sign.Signed), Some (Endian.Big) when size >= 9 && size <= 16 ->
           [%expr (Bitstring.extract_int_be_signed
-          [%e (mkident dat)] [%e (mkident off)] [%e (mkident len)] [%e l])]
+          [%e (mkident ~loc dat)] [%e (mkident ~loc off)] [%e (mkident ~loc len)] [%e l])]
+          [@metaloc loc]
       | Some (size), Some (Sign.Unsigned), Some (Endian.Big) when size >= 9 && size <= 16 ->
           [%expr (Bitstring.extract_int_be_unsigned
-          [%e (mkident dat)] [%e (mkident off)] [%e (mkident len)] [%e l])]
+          [%e (mkident ~loc dat)] [%e (mkident ~loc off)] [%e (mkident ~loc len)] [%e l])]
+          [@metaloc loc]
       | Some (size), Some (Sign.Signed), Some (Endian.Little) when size >= 9 && size <= 16 ->
           [%expr (Bitstring.extract_int_le_signed
-          [%e (mkident dat)] [%e (mkident off)] [%e (mkident len)] [%e l])]
+          [%e (mkident ~loc dat)] [%e (mkident ~loc off)] [%e (mkident ~loc len)] [%e l])]
+          [@metaloc loc]
       | Some (size), Some (Sign.Unsigned), Some (Endian.Little) when size >= 9 && size <= 16 ->
           [%expr (Bitstring.extract_int_le_unsigned
-          [%e (mkident dat)] [%e (mkident off)] [%e (mkident len)] [%e l])]
+          [%e (mkident ~loc dat)] [%e (mkident ~loc off)] [%e (mkident ~loc len)] [%e l])]
+          [@metaloc loc]
       | Some (size), Some (Sign.Signed), Some (Endian.Native) when size >= 9 && size <= 16 ->
           [%expr (Bitstring.extract_int_ne_signed
-          [%e (mkident dat)] [%e (mkident off)] [%e (mkident len)] [%e l])]
+          [%e (mkident ~loc dat)] [%e (mkident ~loc off)] [%e (mkident ~loc len)] [%e l])]
+          [@metaloc loc]
       | Some (size), Some (Sign.Unsigned), Some (Endian.Native) when size >= 9 && size <= 16 ->
           [%expr (Bitstring.extract_int_ne_unsigned
-          [%e (mkident dat)] [%e (mkident off)] [%e (mkident len)] [%e l])]
+          [%e (mkident ~loc dat)] [%e (mkident ~loc off)] [%e (mkident ~loc len)] [%e l])]
+          [@metaloc loc]
       | Some (size), Some (Sign.Signed), Some (Endian.Referred r) when size >= 9 && size <= 16 ->
           [%expr (Bitstring.extract_int_ee_signed
-          [%e r] [%e (mkident dat)] [%e (mkident off)] [%e (mkident len)] [%e l])]
+          [%e r] [%e (mkident ~loc dat)] [%e (mkident ~loc off)] [%e (mkident ~loc len)] [%e l])]
+          [@metaloc loc]
       | Some (size), Some (Sign.Unsigned), Some (Endian.Referred r) when size >= 9 && size <= 16 ->
           [%expr (Bitstring.extract_int_ee_unsigned
-          [%e r] [%e (mkident dat)] [%e (mkident off)] [%e (mkident len)] [%e l])]
+          [%e r] [%e (mkident ~loc dat)] [%e (mkident ~loc off)] [%e (mkident ~loc len)] [%e l])]
+          [@metaloc loc]
       (* 32-bit type *)
       | Some (size), Some (Sign.Signed), Some (Endian.Big) when size >= 17 && size <= 32 ->
           [%expr (Bitstring.extract_int32_be_signed
-          [%e (mkident dat)] [%e (mkident off)] [%e (mkident len)] [%e l])]
+          [%e (mkident ~loc dat)] [%e (mkident ~loc off)] [%e (mkident ~loc len)] [%e l])]
+          [@metaloc loc]
       | Some (size), Some (Sign.Unsigned), Some (Endian.Big) when size >= 17 && size <= 32 ->
           [%expr (Bitstring.extract_int32_be_unsigned
-          [%e (mkident dat)] [%e (mkident off)] [%e (mkident len)] [%e l])]
+          [%e (mkident ~loc dat)] [%e (mkident ~loc off)] [%e (mkident ~loc len)] [%e l])]
+          [@metaloc loc]
       | Some (size), Some (Sign.Signed), Some (Endian.Little) when size >= 17 && size <= 32 ->
           [%expr (Bitstring.extract_int32_le_signed
-          [%e (mkident dat)] [%e (mkident off)] [%e (mkident len)] [%e l])]
+          [%e (mkident ~loc dat)] [%e (mkident ~loc off)] [%e (mkident ~loc len)] [%e l])]
+          [@metaloc loc]
       | Some (size), Some (Sign.Unsigned), Some (Endian.Little) when size >= 17 && size <= 32 ->
           [%expr (Bitstring.extract_int32_le_unsigned
-          [%e (mkident dat)] [%e (mkident off)] [%e (mkident len)] [%e l])]
+          [%e (mkident ~loc dat)] [%e (mkident ~loc off)] [%e (mkident ~loc len)] [%e l])]
+          [@metaloc loc]
       | Some (size), Some (Sign.Signed), Some (Endian.Native) when size >= 17 && size <= 32 ->
           [%expr (Bitstring.extract_int32_ne_signed
-          [%e (mkident dat)] [%e (mkident off)] [%e (mkident len)] [%e l])]
+          [%e (mkident ~loc dat)] [%e (mkident ~loc off)] [%e (mkident ~loc len)] [%e l])]
+          [@metaloc loc]
       | Some (size), Some (Sign.Unsigned), Some (Endian.Native) when size >= 17 && size <= 32 ->
           [%expr (Bitstring.extract_int32_ne_unsigned
-          [%e (mkident dat)] [%e (mkident off)] [%e (mkident len)] [%e l])]
+          [%e (mkident ~loc dat)] [%e (mkident ~loc off)] [%e (mkident ~loc len)] [%e l])]
+          [@metaloc loc]
       | Some (size), Some (Sign.Signed), Some (Endian.Referred r) when size >= 17 && size <= 32 ->
           [%expr (Bitstring.extract_int32_ee_signed
-          [%e r] [%e (mkident dat)] [%e (mkident off)] [%e (mkident len)] [%e l])]
+          [%e r] [%e (mkident ~loc dat)] [%e (mkident ~loc off)] [%e (mkident ~loc len)] [%e l])]
+          [@metaloc loc]
       | Some (size), Some (Sign.Unsigned), Some (Endian.Referred r) when size >= 17 && size <= 32 ->
           [%expr (Bitstring.extract_int32_ee_unsigned
-          [%e r] [%e (mkident dat)] [%e (mkident off)] [%e (mkident len)] [%e l])]
+          [%e r] [%e (mkident ~loc dat)] [%e (mkident ~loc off)] [%e (mkident ~loc len)] [%e l])]
+          [@metaloc loc]
       (* 64-bit type *)
       | Some (size), Some (Sign.Signed), Some (Endian.Big) when size >= 33 && size <= 64 ->
           [%expr (Bitstring.extract_int64_be_signed
-          [%e (mkident dat)] [%e (mkident off)] [%e (mkident len)] [%e l])]
+          [%e (mkident ~loc dat)] [%e (mkident ~loc off)] [%e (mkident ~loc len)] [%e l])]
+          [@metaloc loc]
       | Some (size), Some (Sign.Unsigned), Some (Endian.Big) when size >= 33 && size <= 64 ->
           [%expr (Bitstring.extract_int64_be_unsigned
-          [%e (mkident dat)] [%e (mkident off)] [%e (mkident len)] [%e l])]
+          [%e (mkident ~loc dat)] [%e (mkident ~loc off)] [%e (mkident ~loc len)] [%e l])]
+          [@metaloc loc]
       | Some (size), Some (Sign.Signed), Some (Endian.Little) when size >= 33 && size <= 64 ->
           [%expr (Bitstring.extract_int64_le_signed
-          [%e (mkident dat)] [%e (mkident off)] [%e (mkident len)] [%e l])]
+          [%e (mkident ~loc dat)] [%e (mkident ~loc off)] [%e (mkident ~loc len)] [%e l])]
+          [@metaloc loc]
       | Some (size), Some (Sign.Unsigned), Some (Endian.Little) when size >= 33 && size <= 64 ->
           [%expr (Bitstring.extract_int64_le_unsigned
-          [%e (mkident dat)] [%e (mkident off)] [%e (mkident len)] [%e l])]
+          [%e (mkident ~loc dat)] [%e (mkident ~loc off)] [%e (mkident ~loc len)] [%e l])]
+          [@metaloc loc]
       | Some (size), Some (Sign.Signed), Some (Endian.Native) when size >= 33 && size <= 64 ->
           [%expr (Bitstring.extract_int64_ne_signed
-          [%e (mkident dat)] [%e (mkident off)] [%e (mkident len)] [%e l])]
+          [%e (mkident ~loc dat)] [%e (mkident ~loc off)] [%e (mkident ~loc len)] [%e l])]
+          [@metaloc loc]
       | Some (size), Some (Sign.Unsigned), Some (Endian.Native) when size >= 33 && size <= 64 ->
           [%expr (Bitstring.extract_int64_ne_unsigned
-          [%e (mkident dat)] [%e (mkident off)] [%e (mkident len)] [%e l])]
+          [%e (mkident ~loc dat)] [%e (mkident ~loc off)] [%e (mkident ~loc len)] [%e l])]
+          [@metaloc loc]
       | Some (size), Some (Sign.Signed), Some (Endian.Referred r) when size >= 33 && size <= 64 ->
           [%expr (Bitstring.extract_int64_ee_signed
-          [%e r] [%e (mkident dat)] [%e (mkident off)] [%e (mkident len)] [%e l])]
+          [%e r] [%e (mkident ~loc dat)] [%e (mkident ~loc off)] [%e (mkident ~loc len)] [%e l])]
+          [@metaloc loc]
       | Some (size), Some (Sign.Unsigned), Some (Endian.Referred r) when size >= 33 && size <= 64 ->
           [%expr (Bitstring.extract_int64_ee_unsigned
-          [%e r] [%e (mkident dat)] [%e (mkident off)] [%e (mkident len)] [%e l])]
+          [%e r] [%e (mkident ~loc dat)] [%e (mkident ~loc off)] [%e (mkident ~loc len)] [%e l])]
+          [@metaloc loc]
       (* Variable size *)
       | None, Some (Sign.Signed), Some (Endian.Big) ->
           [%expr (Bitstring.extract_int64_be_signed
-          [%e (mkident dat)] [%e (mkident off)] [%e (mkident len)] [%e l])]
+          [%e (mkident ~loc dat)] [%e (mkident ~loc off)] [%e (mkident ~loc len)] [%e l])]
+          [@metaloc loc]
       | None, Some (Sign.Unsigned), Some (Endian.Big) ->
           [%expr (Bitstring.extract_int64_be_unsigned
-          [%e (mkident dat)] [%e (mkident off)] [%e (mkident len)] [%e l])]
+          [%e (mkident ~loc dat)] [%e (mkident ~loc off)] [%e (mkident ~loc len)] [%e l])]
+          [@metaloc loc]
       | None, Some (Sign.Signed), Some (Endian.Little) ->
           [%expr (Bitstring.extract_int64_le_signed
-          [%e (mkident dat)] [%e (mkident off)] [%e (mkident len)] [%e l])]
+          [%e (mkident ~loc dat)] [%e (mkident ~loc off)] [%e (mkident ~loc len)] [%e l])]
+          [@metaloc loc]
       | None, Some (Sign.Unsigned), Some (Endian.Little) ->
           [%expr (Bitstring.extract_int64_le_unsigned
-          [%e (mkident dat)] [%e (mkident off)] [%e (mkident len)] [%e l])]
+          [%e (mkident ~loc dat)] [%e (mkident ~loc off)] [%e (mkident ~loc len)] [%e l])]
+          [@metaloc loc]
       | None, Some (Sign.Signed), Some (Endian.Native) ->
           [%expr (Bitstring.extract_int64_ne_signed
-          [%e (mkident dat)] [%e (mkident off)] [%e (mkident len)] [%e l])]
+          [%e (mkident ~loc dat)] [%e (mkident ~loc off)] [%e (mkident ~loc len)] [%e l])]
+          [@metaloc loc]
       | None, Some (Sign.Unsigned), Some (Endian.Native) ->
           [%expr (Bitstring.extract_int64_ne_unsigned
-          [%e (mkident dat)] [%e (mkident off)] [%e (mkident len)] [%e l])]
+          [%e (mkident ~loc dat)] [%e (mkident ~loc off)] [%e (mkident ~loc len)] [%e l])]
+          [@metaloc loc]
       | None, Some (Sign.Signed), Some (Endian.Referred r) ->
           [%expr (Bitstring.extract_int64_ee_signed
-          [%e r] [%e (mkident dat)] [%e (mkident off)] [%e (mkident len)] [%e l])]
+          [%e r] [%e (mkident ~loc dat)] [%e (mkident ~loc off)] [%e (mkident ~loc len)] [%e l])]
+          [@metaloc loc]
       | None, Some (Sign.Unsigned), Some (Endian.Referred r) ->
           [%expr (Bitstring.extract_int64_ee_unsigned
-          [%e r] [%e (mkident dat)] [%e (mkident off)] [%e (mkident len)] [%e l])]
+          [%e r] [%e (mkident ~loc dat)] [%e (mkident ~loc off)] [%e (mkident ~loc len)] [%e l])]
+          [@metaloc loc]
       (* Invalid type *)
       | _, _, _ ->
-          failwith "Invalid type"
+          raise (location_exn ~loc "Invalid type")
       end
-  | _ -> failwith "Invalid type"
+  | _ -> raise (location_exn ~loc "Invalid type")
 
-let generate_value (dat, off, len) (l, q) =
+let generate_value (dat, off, len) (l, q) loc =
   let open Qualifiers in
   match q.bind with
   | Some b -> b
-  | None -> generate_extractor (dat, off, len) (l, q)
+  | None -> generate_extractor (dat, off, len) (l, q) loc
 
-let rec generate_next org_off (dat, off, len) (p, l, q) behavior fields =
-  [%expr let [%p (mkpatvar off)] = [%e (mkident off)] + [%e l]
-  and [%p (mkpatvar len)] = [%e (mkident len)] - [%e l] in
-  [%e (generate_fields org_off (dat, off, len) behavior fields)]]
+let rec generate_next org_off (dat, off, len) (p, l, q) loc beh fields =
+  [%expr let [%p (mkpatvar ~loc off)] = [%e (mkident ~loc off)] + [%e l]
+  and [%p (mkpatvar ~loc len)] = [%e (mkident ~loc len)] - [%e l] in
+  [%e (generate_fields org_off (dat, off, len) loc beh fields)]]
+  [@metaloc loc]
 
-and generate_next_all org_off (dat, off, len) behavior fields =
-  [%expr let [%p (mkpatvar off)] = [%e (mkident off)] + [%e (mkident len)]
-  and [%p (mkpatvar len)] = 0 in
-  [%e (generate_fields org_off (dat, off, len) behavior fields)]]
+and generate_next_all org_off (dat, off, len) loc beh fields =
+  [%expr let [%p (mkpatvar ~loc off)] = [%e (mkident ~loc off)] + [%e (mkident ~loc len)]
+  and [%p (mkpatvar ~loc len)] = 0 in
+  [%e (generate_fields org_off (dat, off, len) loc beh fields)]]
+  [@metaloc loc]
 
-and generate_match org_off (dat, off, len) (p, l, q) behavior fields =
+and generate_match org_off (dat, off, len) (p, l, q) loc beh fields =
   let open Qualifiers in
   let valN = mksym "value" in
   let m = match q.check with
   | Some chk ->
-      [%expr begin match [%e (mkident valN)] with
-      | [%p p] when [%e chk] -> [%e (generate_fields org_off (dat, off, len) behavior fields)]
-      | _ -> ()
-      end]
+      [%expr begin match [%e (mkident ~loc valN)] with
+      | [%p p] when [%e chk] -> [%e (generate_fields org_off (dat, off, len) loc beh fields)]
+      | _ -> () end] [@metaloc loc]
   | None ->
-      [%expr begin match [%e (mkident valN)] with
-      | [%p p] when true -> [%e (generate_fields org_off (dat, off, len) behavior fields)]
-      | _ -> ()
-      end]
+      [%expr begin match [%e (mkident ~loc valN)] with
+      | [%p p] when true  -> [%e (generate_fields org_off (dat, off, len) loc beh fields)]
+      | _ -> () end] [@metaloc loc]
   in
-  [%expr let [%p (mkpatvar valN)] = [%e (generate_value (dat, off, len) (l, q))] in
-  let [%p (mkpatvar off)] = [%e (mkident off)] + [%e l]
-  and [%p (mkpatvar len)] = [%e (mkident len)] - [%e l] in [%e m]]
+  [%expr let [%p (mkpatvar ~loc valN)] = [%e (generate_value (dat, off, len) (l, q) loc)] in
+  let [%p (mkpatvar ~loc off)] = [%e (mkident ~loc off)] + [%e l]
+  and [%p (mkpatvar ~loc len)] = [%e (mkident ~loc len)] - [%e l] in [%e m]]
+  [@metaloc loc]
 
-and generate_offset_saver org_off (dat, off, len) (p, l, q) behavior =
+and generate_offset_saver org_off (dat, off, len) (p, l, q) loc beh =
   let open Qualifiers in
   match q.save_offset_to with
-  | Some { pexp_desc = Pexp_ident ({ txt; loc }) } -> [%expr
-      let [%p (mkpatvar (Longident.last txt))] = [%e (mkident off)] - [%e (mkident org_off)]
-      in [%e behavior]]
-  | Some _ | None -> behavior
+  | Some { pexp_desc = Pexp_ident ({ txt; _ }) } -> [%expr
+      let [%p (mkpatvar ~loc (Longident.last txt))] = [%e (mkident ~loc off)] - [%e (mkident ~loc org_off)]
+      in [%e beh]] [@metaloc loc]
+  | Some _ | None -> beh
 
-and generate_fields_with_quals org_off (dat, off, len) (p, l, q) behavior fields =
+and generate_fields_with_quals org_off (dat, off, len) (p, l, q) loc beh fields =
   let open Qualifiers in
   match check_field_len (l, q), q.value_type with
   | Some (-1), Some (Type.Bitstring | Type.String) ->
       begin match p with
       | { ppat_desc = Ppat_var(_) } ->
-          generate_offset_saver org_off (dat, off, len) (p, l, q) [%expr
-          let [%p p] = [%e (generate_value (dat, off, len) (l, q))] in
-          [%e (generate_next_all org_off (dat, off, len) behavior fields)]]
+          generate_offset_saver org_off (dat, off, len) (p, l, q) loc [%expr
+          let [%p p] = [%e (generate_value (dat, off, len) (l, q) loc)] in
+          [%e (generate_next_all org_off (dat, off, len) loc beh fields)]]
+          [@metaloc loc]
         | [%pat? _ ] ->
-          generate_offset_saver org_off (dat, off, len) (p, l, q) [%expr
-          [%e (generate_next_all org_off (dat, off, len) behavior fields)]]
+          generate_offset_saver org_off (dat, off, len) (p, l, q) loc [%expr
+          [%e (generate_next_all org_off (dat, off, len) loc beh fields)]]
+          [@metaloc loc]
       | _ ->
           failwith "Unbound string or bitstring can only be assigned to a variable or skipped"
       end
   | Some (_), Some (Type.Bitstring) ->
       begin match p with
       | { ppat_desc = Ppat_var(_) } ->
-          generate_offset_saver org_off (dat, off, len) (p, l, q) [%expr
-          if [%e (mkident len)] >= [%e l] then
-            let [%p p] = [%e (generate_value (dat, off, len) (l, q))] in
-            [%e (generate_next org_off (dat, off, len) (p, l, q) behavior fields)]
+          generate_offset_saver org_off (dat, off, len) (p, l, q) loc [%expr
+          if [%e (mkident ~loc len)] >= [%e l] then
+            let [%p p] = [%e (generate_value (dat, off, len) (l, q) loc)] in
+            [%e (generate_next org_off (dat, off, len) (p, l, q) loc beh fields)]
           else ()]
+          [@metaloc loc]
       | [%pat? _ ] ->
-          generate_offset_saver org_off (dat, off, len) (p, l, q) [%expr
-          if [%e (mkident len)] >= [%e l] then
-            [%e (generate_next org_off (dat, off, len) (p, l, q) behavior fields)]
+          generate_offset_saver org_off (dat, off, len) (p, l, q) loc [%expr
+          if [%e (mkident ~loc len)] >= [%e l] then
+            [%e (generate_next org_off (dat, off, len) (p, l, q) loc beh fields)]
           else ()]
+          [@metaloc loc]
       | _ -> failwith "Bound bitstring can only be assigned to variables or skipped"
       end
   | Some (_), Some (_) ->
-      generate_offset_saver org_off (dat, off, len) (p, l, q) [%expr
-      if [%e (mkident len)] >= [%e l] then
-      [%e (generate_match org_off (dat, off, len) (p, l, q) behavior fields)]
+      generate_offset_saver org_off (dat, off, len) (p, l, q) loc [%expr
+      if [%e (mkident ~loc len)] >= [%e l] then
+      [%e (generate_match org_off (dat, off, len) (p, l, q) loc beh fields)]
       else ()]
+      [@metaloc loc]
   | None, Some (_) ->
-      generate_offset_saver org_off (dat, off, len) (p, l, q) [%expr
-      if [%e l] >= 1 && [%e l] <= 64 && [%e (mkident len)] >= [%e l] then
-      [%e (generate_match org_off (dat, off, len) (p, l, q) behavior fields)]
+      generate_offset_saver org_off (dat, off, len) (p, l, q) loc [%expr
+      if [%e l] >= 1 && [%e l] <= 64 && [%e (mkident ~loc len)] >= [%e l] then
+      [%e (generate_match org_off (dat, off, len) (p, l, q) loc beh fields)]
       else ()]
+      [@metaloc loc]
   | _, _ -> failwith "No type to generate"
 
-and generate_fields org_off (dat, off, len) behavior fields =
+and generate_fields org_off (dat, off, len) loc beh fields =
   let open Qualifiers in
   match fields with
-  | [] -> behavior
-  | (p, None, None) :: tl -> behavior
+  | [] -> beh
+  | (p, None, None) :: tl -> beh
   | (p, Some l, Some q) :: tl ->
-      generate_fields_with_quals org_off (dat, off, len) (p, l, q) behavior tl
+      generate_fields_with_quals org_off (dat, off, len) (p, l, q) loc beh tl
   | _ -> failwith "Wrong pattern type in bitmatch case"
 
 let generate_case org_off res (dat, off, len) case =
   match case.pc_lhs.ppat_desc with
   | Ppat_constant (Const_string (value, _)) ->
-      let beh = [%expr [%e (mkident res)] := Some ([%e case.pc_rhs]); raise Exit] in
-      List.map ~f:(fun flds -> parse_fields flds) (String.split ~on:';' value)
-      |> generate_fields org_off (dat, off, len) beh
+      let loc = case.pc_lhs.ppat_loc in
+      let beh = [%expr [%e (mkident ~loc res)] := Some ([%e case.pc_rhs]); raise Exit] [@metaloc loc]
+      in
+      List.map ~f:(fun flds -> parse_fields ~loc flds) (String.split ~on:';' value)
+      |> generate_fields org_off (dat, off, len) loc beh
     | _ -> failwith "Wrong pattern type in bitmatch case"
 
-let generate_cases ident cases =
+let generate_cases ident loc cases =
   let datN = mksym "data" in
   let offNN = mksym "off" and lenNN = mksym "len" in
   let offN = mksym "off" and lenN = mksym "len" in
@@ -509,19 +558,20 @@ let generate_cases ident cases =
     | hd :: tl -> Exp.sequence hd (build_seq tl)
   in
   let seq = build_seq stmts in
-  let tuple = [%pat? ([%p (mkpatvar datN)], [%p (mkpatvar offN)], [%p (mkpatvar lenN)])] in
+  let tuple = [%pat? ([%p (mkpatvar ~loc datN)], [%p (mkpatvar ~loc offN)], [%p (mkpatvar ~loc lenN)])] in
   [%expr
     let [%p tuple] = [%e ident] in
-    let [%p (mkpatvar offNN)] = [%e (mkident offN)]
-    and [%p (mkpatvar lenNN)] = [%e (mkident lenN)]
+    let [%p (mkpatvar ~loc offNN)] = [%e (mkident ~loc offN)]
+    and [%p (mkpatvar ~loc lenNN)] = [%e (mkident ~loc lenN)]
     in
-    let [%p (mkpatvar algN)] = ([%e (mkident offN)] land 7) = 0 in
-    let [%p (mkpatvar resN)] = ref None in
+    let [%p (mkpatvar ~loc algN)] = ([%e (mkident ~loc offN)] land 7) = 0 in
+    let [%p (mkpatvar ~loc resN)] = ref None in
     (try [%e seq];
     with | Exit -> ());
-    match ![%e (mkident resN)] with
+    match ![%e (mkident ~loc resN)] with
     | Some x -> x
     | None -> raise (Match_failure ("", 0, 0))]
+  [@metaloc loc]
 
 let getenv_mapper argv =
   (* Our getenv_mapper only overrides the handling of expressions in the default mapper. *)
@@ -532,10 +582,8 @@ let getenv_mapper argv =
         begin match pstr with
         (* Should have a single structure item, which is evaluation of a match expression *)
         | PStr [{ pstr_desc = Pstr_eval ( { pexp_loc = loc; pexp_desc =
-          Pexp_match (ident, cases) }, _) }] -> generate_cases ident cases
-        | _ ->
-            raise (Location.Error (
-              Location.error ~loc "[%getenv] accepts a string, e.g. [%getenv \"USER\"]"))
+          Pexp_match (ident, cases) }, _) }] -> generate_cases ident loc cases
+        | _ -> raise (location_exn ~loc "[%bitstring] requires a match operator")
         end
     (* Delegate to the default mapper. *)
     | x -> default_mapper.expr mapper x;
