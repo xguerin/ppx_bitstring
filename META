@@ -1,4 +1,9 @@
 version = "0.1"
-description = "Bitstring PPX extension"
-requires = "bitstring"
-ppx = "./ppx_bitstring"
+description = "Bitstring PPX extensions"
+
+package "match" (
+  version = "0.1"
+  description = "Bitstring: concrete match syntax"
+  requires = "bitstring,compiler-libs.common"
+  ppx = "./ppx_bitstring.match"
+)

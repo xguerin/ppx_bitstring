@@ -512,7 +512,7 @@ and generate_fields_with_quals ~loc org_off (dat, off, len) (p, l, q) beh fields
       | _ ->
           location_exn ~loc  "Unbound string or bitstring can only be assigned to a variable or skipped"
       end
-  | Some (_), Some (Type.Bitstring) ->
+  | (Some (_) | None), Some (Type.Bitstring) ->
       begin match p with
       | { ppat_desc = Ppat_var(_) } ->
           generate_offset_saver org_off (dat, off, len) (p, l, q) loc [%expr
@@ -529,13 +529,19 @@ and generate_fields_with_quals ~loc org_off (dat, off, len) (p, l, q) beh fields
           [@metaloc loc]
       | _ -> location_exn ~loc  "Bound bitstring can only be assigned to variables or skipped"
       end
-  | Some (_), Some (_) ->
+  | (Some (_) | None), Some (Type.String) ->
       generate_offset_saver org_off (dat, off, len) (p, l, q) loc [%expr
       if [%e (mkident ~loc len)] >= [%e l] then
       [%e (generate_match org_off (dat, off, len) (p, l, q) loc beh fields)]
       else ()]
       [@metaloc loc]
-  | None, Some (_) ->
+  | Some (_), Some (Type.Int) ->
+      generate_offset_saver org_off (dat, off, len) (p, l, q) loc [%expr
+      if [%e (mkident ~loc len)] >= [%e l] then
+      [%e (generate_match org_off (dat, off, len) (p, l, q) loc beh fields)]
+      else ()]
+      [@metaloc loc]
+  | None, Some (Type.Int) ->
       generate_offset_saver org_off (dat, off, len) (p, l, q) loc [%expr
       if [%e l] >= 1 && [%e l] <= 64 && [%e (mkident ~loc len)] >= [%e l] then
       [%e (generate_match org_off (dat, off, len) (p, l, q) loc beh fields)]
