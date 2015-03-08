@@ -84,8 +84,27 @@ let mkpatvar ~loc name =
 let mkident ~loc name =
   { (Parse.expression (Lexing.from_string name)) with pexp_loc = loc }
 
+let rec process_loc ~loc expr =
+  match expr with
+  | { pexp_desc = Pexp_tuple(ops) } ->
+      let fld = List.fold ~init:[]
+        ~f:(fun acc exp -> acc @ [ process_loc ~loc exp ]) ops
+      in
+      { expr with pexp_desc = Pexp_tuple(fld); pexp_loc = loc }
+  | { pexp_desc = Pexp_apply(ident, ops) } ->
+      let fld = List.fold ~init:[]
+        ~f:(fun acc (lbl, exp) -> acc @ [ (lbl, (process_loc ~loc exp)) ]) ops
+      in
+      { expr with pexp_desc = Pexp_apply(ident, fld); pexp_loc = loc }
+  | { pexp_desc = Pexp_ident(_) }
+  | { pexp_desc = Pexp_constant(_) } ->
+      { expr with pexp_loc = loc }
+  | _ ->
+      fprintf stderr "%s\n" (Pprintast.string_of_expression expr);
+      expr
+
 let parse_expr ~loc str =
-  { (Parse.expression (Lexing.from_string str)) with pexp_loc = loc }
+   process_loc ~loc (Parse.expression (Lexing.from_string str))
 
 let parse_pattern ~loc str =
   { (Parse.pattern (Lexing.from_string str)) with ppat_loc = loc }
@@ -93,88 +112,88 @@ let parse_pattern ~loc str =
 (* Exception *)
 
 let location_exn ~loc msg =
-  Location.Error (Location.error ~loc msg)
+  raise (Location.Error (Location.error ~loc ("Error: " ^ msg)))
 
 (* Processing qualifiers *)
 
-let process_qual state q =
+let process_qual ~loc state q =
   let open Qualifiers in
   match q with
   | [%expr int] ->
       begin match state.value_type with
-      | Some v -> failwith "Value type can only be defined once"
+      | Some v -> location_exn ~loc "Value type can only be defined once"
       | None -> { state with value_type = Some Type.Int }
       end
   | [%expr string] ->
       begin match state.value_type with
-      | Some v -> failwith "Value type can only be defined once"
+      | Some v -> location_exn ~loc  "Value type can only be defined once"
       | None -> { state with value_type = Some Type.String }
       end
   | [%expr bitstring] ->
       begin match state.value_type with
-      | Some v -> failwith "Value type can only be defined once"
+      | Some v -> location_exn ~loc  "Value type can only be defined once"
       | None -> { state with value_type = Some Type.Bitstring }
       end
   | [%expr signed] ->
       begin match state.sign with
-      | Some v -> failwith "Signedness can only be defined once"
+      | Some v -> location_exn ~loc  "Signedness can only be defined once"
       | None -> { state with sign = Some Sign.Signed }
       end
   | [%expr unsigned] ->
       begin match state.sign with
-      | Some v -> failwith "Signedness can only be defined once"
+      | Some v -> location_exn ~loc  "Signedness can only be defined once"
       | None -> { state with sign = Some Sign.Unsigned }
       end
   | [%expr littleendian] ->
       begin match state.endian with
-      | Some v -> failwith "Endianness can only be defined once"
+      | Some v -> location_exn ~loc  "Endianness can only be defined once"
       | None -> { state with endian = Some Endian.Little }
       end
   | [%expr bigendian] ->
       begin match state.endian with
-      | Some v -> failwith "Endianness can only be defined once"
+      | Some v -> location_exn ~loc  "Endianness can only be defined once"
       | None -> { state with endian = Some Endian.Big }
       end
   | [%expr nativeendian] ->
       begin match state.endian with
-      | Some v -> failwith "Endianness can only be defined once"
+      | Some v -> location_exn ~loc  "Endianness can only be defined once"
       | None -> { state with endian = Some Endian.Native }
       end
   | [%expr endian [%e? sub]] ->
       begin match state.endian with
-      | Some v -> failwith "Endianness can only be defined once"
+      | Some v -> location_exn ~loc  "Endianness can only be defined once"
       | None -> { state with endian = Some (Endian.Referred sub) }
       end
   | [%expr bind [%e? sub]] ->
       begin match state.check with
-      | Some v -> failwith "Bind expression can only be defined once"
+      | Some v -> location_exn ~loc  "Bind expression can only be defined once"
       | None -> { state with bind = Some sub }
       end
   | [%expr check [%e? sub]] ->
       begin match state.bind with
-      | Some v -> failwith "Check expression can only be defined once"
+      | Some v -> location_exn ~loc  "Check expression can only be defined once"
       | None -> { state with check = Some sub }
       end
   | [%expr save_offset_to [%e? sub]] ->
       begin match state.save_offset_to with
-      | Some v -> failwith "Offset expression can only be defined once"
+      | Some v -> location_exn ~loc  "Offset expression can only be defined once"
       | None -> { state with save_offset_to = Some sub }
       end
-  | _ -> failwith ("Invalid qualifier: " ^ (Pprintast.string_of_expression q))
+  | _ -> raise (location_exn ~loc ("Invalid qualifier: " ^ (Pprintast.string_of_expression q)))
 
 let parse_quals ~loc str =
   let expr = parse_expr ~loc str in
-  let rec process_quals state = function
+  let rec process_quals ~loc state = function
     | [] -> state
-    | hd :: tl -> process_quals (process_qual state hd) tl
+    | hd :: tl -> process_quals ~loc (process_qual ~loc state hd) tl
   in match expr with
   (* single named qualifiers *)
-  | { pexp_desc = Pexp_ident (_) } -> process_qual Qualifiers.empty expr
+  | { pexp_desc = Pexp_ident (_) } -> process_qual ~loc Qualifiers.empty expr
   (* single functional qualifiers *)
-  | { pexp_desc = Pexp_apply (_, _) } -> process_qual Qualifiers.empty expr
+  | { pexp_desc = Pexp_apply (_, _) } -> process_qual ~loc Qualifiers.empty expr
   (* multiple qualifiers *)
-  | { pexp_desc = Pexp_tuple (elements) } -> process_quals Qualifiers.empty elements
-  | _ -> failwith ("Format error: " ^ str)
+  | { pexp_desc = Pexp_tuple (elements) } -> process_quals ~loc Qualifiers.empty elements
+  | _ -> location_exn ~loc  ("Format error: " ^ str)
 
 (* Processing expression *)
 
@@ -247,27 +266,27 @@ let parse_fields ~loc str =
       (parse_pattern ~loc pat, Some (parse_expr ~loc len), Some Qualifiers.default)
   | [ pat; len; quals ] ->
       (parse_pattern ~loc pat, Some (parse_expr ~loc len), Some (Qualifiers.set_defaults (parse_quals ~loc quals)))
-  | _ -> failwith ("Format error: " ^ str)
+  | _ -> location_exn ~loc  ("Format error: " ^ str)
 
 (* Generators *)
 
-let check_field_len (l, q) =
+let check_field_len ~loc (l, q) =
   let open Option.Monad_infix in
   match q.Qualifiers.value_type with
   | Some (Type.String) ->
       evaluate_expr l >>= fun v ->
         if v < -1 || (v > 0 && (v mod 8) <> 0) then
-          failwith "length of string must be > 0 and multiple of 8, or the special value -1"
+          location_exn ~loc  "length of string must be > 0 and multiple of 8, or the special value -1"
         else Some v
   | Some (Type.Bitstring) ->
       evaluate_expr l >>= fun v ->
-        if v < -1 then failwith "length of bitstring must be >= 0 or the special value -1"
+        if v < -1 then location_exn ~loc  "length of bitstring must be >= 0 or the special value -1"
         else Some v
   | Some (Type.Int) ->
       evaluate_expr l >>= fun v ->
-        if v < 1 || v > 64 then failwith "length of int field must be [1..64]"
+        if v < 1 || v > 64 then location_exn ~loc  "length of int field must be [1..64]"
         else Some v
-  | None -> failwith "No type to check"
+  | None -> location_exn ~loc  "No type to check"
 
 let generate_extractor (dat, off, len) (l, q) loc =
   let open Qualifiers in
@@ -438,16 +457,16 @@ let generate_value (dat, off, len) (l, q) loc =
   | Some b -> b
   | None -> generate_extractor (dat, off, len) (l, q) loc
 
-let rec generate_next org_off (dat, off, len) (p, l, q) loc beh fields =
+let rec generate_next org_off ~loc (dat, off, len) (p, l, q) beh fields =
   [%expr let [%p (mkpatvar ~loc off)] = [%e (mkident ~loc off)] + [%e l]
   and [%p (mkpatvar ~loc len)] = [%e (mkident ~loc len)] - [%e l] in
-  [%e (generate_fields org_off (dat, off, len) loc beh fields)]]
+  [%e (generate_fields org_off ~loc (dat, off, len) beh fields)]]
   [@metaloc loc]
 
-and generate_next_all org_off (dat, off, len) loc beh fields =
+and generate_next_all ~loc org_off (dat, off, len) beh fields =
   [%expr let [%p (mkpatvar ~loc off)] = [%e (mkident ~loc off)] + [%e (mkident ~loc len)]
   and [%p (mkpatvar ~loc len)] = 0 in
-  [%e (generate_fields org_off (dat, off, len) loc beh fields)]]
+  [%e (generate_fields org_off ~loc (dat, off, len) beh fields)]]
   [@metaloc loc]
 
 and generate_match org_off (dat, off, len) (p, l, q) loc beh fields =
@@ -456,11 +475,11 @@ and generate_match org_off (dat, off, len) (p, l, q) loc beh fields =
   let m = match q.check with
   | Some chk ->
       [%expr begin match [%e (mkident ~loc valN)] with
-      | [%p p] when [%e chk] -> [%e (generate_fields org_off (dat, off, len) loc beh fields)]
+      | [%p p] when [%e chk] -> [%e (generate_fields org_off ~loc (dat, off, len) beh fields)]
       | _ -> () end] [@metaloc loc]
   | None ->
       [%expr begin match [%e (mkident ~loc valN)] with
-      | [%p p] when true  -> [%e (generate_fields org_off (dat, off, len) loc beh fields)]
+      | [%p p] when true  -> [%e (generate_fields ~loc org_off (dat, off, len) beh fields)]
       | _ -> () end] [@metaloc loc]
   in
   [%expr let [%p (mkpatvar ~loc valN)] = [%e (generate_value (dat, off, len) (l, q) loc)] in
@@ -476,22 +495,22 @@ and generate_offset_saver org_off (dat, off, len) (p, l, q) loc beh =
       in [%e beh]] [@metaloc loc]
   | Some _ | None -> beh
 
-and generate_fields_with_quals org_off (dat, off, len) (p, l, q) loc beh fields =
+and generate_fields_with_quals ~loc org_off (dat, off, len) (p, l, q) beh fields =
   let open Qualifiers in
-  match check_field_len (l, q), q.value_type with
+  match check_field_len ~loc (l, q), q.value_type with
   | Some (-1), Some (Type.Bitstring | Type.String) ->
       begin match p with
       | { ppat_desc = Ppat_var(_) } ->
           generate_offset_saver org_off (dat, off, len) (p, l, q) loc [%expr
           let [%p p] = [%e (generate_value (dat, off, len) (l, q) loc)] in
-          [%e (generate_next_all org_off (dat, off, len) loc beh fields)]]
+          [%e (generate_next_all ~loc org_off (dat, off, len) beh fields)]]
           [@metaloc loc]
         | [%pat? _ ] ->
           generate_offset_saver org_off (dat, off, len) (p, l, q) loc [%expr
-          [%e (generate_next_all org_off (dat, off, len) loc beh fields)]]
+          [%e (generate_next_all org_off ~loc (dat, off, len) beh fields)]]
           [@metaloc loc]
       | _ ->
-          failwith "Unbound string or bitstring can only be assigned to a variable or skipped"
+          location_exn ~loc  "Unbound string or bitstring can only be assigned to a variable or skipped"
       end
   | Some (_), Some (Type.Bitstring) ->
       begin match p with
@@ -499,16 +518,16 @@ and generate_fields_with_quals org_off (dat, off, len) (p, l, q) loc beh fields 
           generate_offset_saver org_off (dat, off, len) (p, l, q) loc [%expr
           if [%e (mkident ~loc len)] >= [%e l] then
             let [%p p] = [%e (generate_value (dat, off, len) (l, q) loc)] in
-            [%e (generate_next org_off (dat, off, len) (p, l, q) loc beh fields)]
+            [%e (generate_next ~loc org_off (dat, off, len) (p, l, q) beh fields)]
           else ()]
           [@metaloc loc]
       | [%pat? _ ] ->
           generate_offset_saver org_off (dat, off, len) (p, l, q) loc [%expr
           if [%e (mkident ~loc len)] >= [%e l] then
-            [%e (generate_next org_off (dat, off, len) (p, l, q) loc beh fields)]
+            [%e (generate_next ~loc org_off (dat, off, len) (p, l, q) beh fields)]
           else ()]
           [@metaloc loc]
-      | _ -> failwith "Bound bitstring can only be assigned to variables or skipped"
+      | _ -> location_exn ~loc  "Bound bitstring can only be assigned to variables or skipped"
       end
   | Some (_), Some (_) ->
       generate_offset_saver org_off (dat, off, len) (p, l, q) loc [%expr
@@ -522,26 +541,26 @@ and generate_fields_with_quals org_off (dat, off, len) (p, l, q) loc beh fields 
       [%e (generate_match org_off (dat, off, len) (p, l, q) loc beh fields)]
       else ()]
       [@metaloc loc]
-  | _, _ -> failwith "No type to generate"
+  | _, _ -> location_exn ~loc  "No type to generate"
 
-and generate_fields org_off (dat, off, len) loc beh fields =
+and generate_fields ~loc org_off (dat, off, len) beh fields =
   let open Qualifiers in
   match fields with
   | [] -> beh
   | (p, None, None) :: tl -> beh
   | (p, Some l, Some q) :: tl ->
-      generate_fields_with_quals org_off (dat, off, len) (p, l, q) loc beh tl
-  | _ -> failwith "Wrong pattern type in bitmatch case"
+      generate_fields_with_quals ~loc org_off (dat, off, len) (p, l, q) beh tl
+  | _ -> location_exn ~loc  "Wrong pattern type in bitmatch case"
 
 let generate_case org_off res (dat, off, len) case =
+  let loc = case.pc_lhs.ppat_loc in
   match case.pc_lhs.ppat_desc with
   | Ppat_constant (Const_string (value, _)) ->
-      let loc = case.pc_lhs.ppat_loc in
       let beh = [%expr [%e (mkident ~loc res)] := Some ([%e case.pc_rhs]); raise Exit] [@metaloc loc]
       in
       List.map ~f:(fun flds -> parse_fields ~loc flds) (String.split ~on:';' value)
-      |> generate_fields org_off (dat, off, len) loc beh
-    | _ -> failwith "Wrong pattern type in bitmatch case"
+      |> generate_fields ~loc org_off (dat, off, len) beh
+    | _ -> location_exn ~loc  "Wrong pattern type in bitmatch case"
 
 let generate_cases ident loc cases =
   let datN = mksym "data" in
@@ -553,7 +572,7 @@ let generate_cases ident loc cases =
     cases
   in
   let rec build_seq = function
-    | [] -> failwith "Empty case list"
+    | [] -> location_exn ~loc  "Empty case list"
     | [hd] -> hd
     | hd :: tl -> Exp.sequence hd (build_seq tl)
   in

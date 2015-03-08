@@ -5,10 +5,10 @@ let decode v =
   printf "hello";
   match%bitstring v with
   | {| 1 : 1;
-      (1 | 2) as c : 2;
+      (1 | 2)  : 2;
       a : 16 : bigendian, int;
-      m : size : endian (a), check (m > 10);
-      s : -1 : string, save_offset_to (hello);
+      m : 16 : endian (a), check (m > 10);
+      _ : -1 : string;
       p : -1 : bitstring
     |} -> Some p
   | {| a : 16 : bigendian, int;
