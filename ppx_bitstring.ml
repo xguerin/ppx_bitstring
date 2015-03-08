@@ -563,6 +563,7 @@ let generate_case org_off res (dat, off, len) case =
     | _ -> location_exn ~loc  "Wrong pattern type in bitmatch case"
 
 let generate_cases ident loc cases =
+  let open Location in
   let datN = mksym "data" in
   let offNN = mksym "off" and lenNN = mksym "len" in
   let offN = mksym "off" and lenN = mksym "len" in
@@ -578,6 +579,9 @@ let generate_cases ident loc cases =
   in
   let seq = build_seq stmts in
   let tuple = [%pat? ([%p (mkpatvar ~loc datN)], [%p (mkpatvar ~loc offN)], [%p (mkpatvar ~loc lenN)])] in
+  let fname = Exp.constant ~loc (Const_string (loc.loc_start.pos_fname, None)) in
+  let lpos = Exp.constant ~loc (Const_int loc.loc_start.pos_lnum) in
+  let cpos = Exp.constant ~loc (Const_int loc.loc_start.pos_cnum) in
   [%expr
     let [%p tuple] = [%e ident] in
     let [%p (mkpatvar ~loc offNN)] = [%e (mkident ~loc offN)]
@@ -589,7 +593,7 @@ let generate_cases ident loc cases =
     with | Exit -> ());
     match ![%e (mkident ~loc resN)] with
     | Some x -> x
-    | None -> raise (Match_failure ("", 0, 0))]
+    | None -> raise (Match_failure ([%e fname], [%e lpos], [%e cpos]))]
   [@metaloc loc]
 
 let getenv_mapper argv =
