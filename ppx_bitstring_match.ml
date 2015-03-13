@@ -21,6 +21,9 @@ module Sign = struct
   type t =
     | Signed
     | Unsigned
+  let to_string = function
+    | Signed -> "signed"
+    | Unsigned -> "unsigned"
 end
 
 module Endian = struct
@@ -29,6 +32,11 @@ module Endian = struct
     | Big
     | Native
     | Referred of Parsetree.expression
+  let to_string = function
+    | Little -> "le"
+    | Big -> "be"
+    | Native -> "ne"
+    | Referred _ -> "ee"
 end
 
 module Qualifiers = struct
@@ -286,7 +294,13 @@ let check_field_len ~loc (l, q) =
       evaluate_expr l >>= fun v ->
         if v < 1 || v > 64 then location_exn ~loc  "length of int field must be [1..64]"
         else Some v
-  | None -> location_exn ~loc  "No type to check"
+  | None -> location_exn ~loc "No type to check"
+
+let get_inttype ~loc = function
+  | v when v > 8  && v <= 16 -> "int"
+  | v when v > 16 && v <= 32 -> "int32"
+  | v when v > 32 && v <= 64 -> "int64"
+  | _ -> location_exn ~loc "Invalid integer size"
 
 let generate_extractor (dat, off, len) (l, q) loc =
   let open Qualifiers in
@@ -305,146 +319,35 @@ let generate_extractor (dat, off, len) (l, q) loc =
           [%e (mkident ~loc len)] [%e l]) then 1 else 0]
           [@metaloc loc]
       (* 8-bit type *)
-      | Some (size), Some (Sign.Signed), Some (_) when size >= 2 && size <= 8 ->
-          [%expr (Bitstring.extract_char_signed
-          [%e (mkident ~loc dat)] [%e (mkident ~loc off)] [%e (mkident ~loc len)] [%e l])]
-          [@metaloc loc]
-      | Some (size), Some (Sign.Unsigned), Some (_) when size >= 2 && size <= 8 ->
-          [%expr (Bitstring.extract_char_unsigned
-          [%e (mkident ~loc dat)] [%e (mkident ~loc off)] [%e (mkident ~loc len)] [%e l])]
-          [@metaloc loc]
-      (* 16-bit type *)
-      | Some (size), Some (Sign.Signed), Some (Endian.Big) when size >= 9 && size <= 16 ->
-          [%expr (Bitstring.extract_int_be_signed
-          [%e (mkident ~loc dat)] [%e (mkident ~loc off)] [%e (mkident ~loc len)] [%e l])]
-          [@metaloc loc]
-      | Some (size), Some (Sign.Unsigned), Some (Endian.Big) when size >= 9 && size <= 16 ->
-          [%expr (Bitstring.extract_int_be_unsigned
-          [%e (mkident ~loc dat)] [%e (mkident ~loc off)] [%e (mkident ~loc len)] [%e l])]
-          [@metaloc loc]
-      | Some (size), Some (Sign.Signed), Some (Endian.Little) when size >= 9 && size <= 16 ->
-          [%expr (Bitstring.extract_int_le_signed
-          [%e (mkident ~loc dat)] [%e (mkident ~loc off)] [%e (mkident ~loc len)] [%e l])]
-          [@metaloc loc]
-      | Some (size), Some (Sign.Unsigned), Some (Endian.Little) when size >= 9 && size <= 16 ->
-          [%expr (Bitstring.extract_int_le_unsigned
-          [%e (mkident ~loc dat)] [%e (mkident ~loc off)] [%e (mkident ~loc len)] [%e l])]
-          [@metaloc loc]
-      | Some (size), Some (Sign.Signed), Some (Endian.Native) when size >= 9 && size <= 16 ->
-          [%expr (Bitstring.extract_int_ne_signed
-          [%e (mkident ~loc dat)] [%e (mkident ~loc off)] [%e (mkident ~loc len)] [%e l])]
-          [@metaloc loc]
-      | Some (size), Some (Sign.Unsigned), Some (Endian.Native) when size >= 9 && size <= 16 ->
-          [%expr (Bitstring.extract_int_ne_unsigned
-          [%e (mkident ~loc dat)] [%e (mkident ~loc off)] [%e (mkident ~loc len)] [%e l])]
-          [@metaloc loc]
-      | Some (size), Some (Sign.Signed), Some (Endian.Referred r) when size >= 9 && size <= 16 ->
-          [%expr (Bitstring.extract_int_ee_signed
-          [%e r] [%e (mkident ~loc dat)] [%e (mkident ~loc off)] [%e (mkident ~loc len)] [%e l])]
-          [@metaloc loc]
-      | Some (size), Some (Sign.Unsigned), Some (Endian.Referred r) when size >= 9 && size <= 16 ->
-          [%expr (Bitstring.extract_int_ee_unsigned
-          [%e r] [%e (mkident ~loc dat)] [%e (mkident ~loc off)] [%e (mkident ~loc len)] [%e l])]
-          [@metaloc loc]
-      (* 32-bit type *)
-      | Some (size), Some (Sign.Signed), Some (Endian.Big) when size >= 17 && size <= 32 ->
-          [%expr (Bitstring.extract_int32_be_signed
-          [%e (mkident ~loc dat)] [%e (mkident ~loc off)] [%e (mkident ~loc len)] [%e l])]
-          [@metaloc loc]
-      | Some (size), Some (Sign.Unsigned), Some (Endian.Big) when size >= 17 && size <= 32 ->
-          [%expr (Bitstring.extract_int32_be_unsigned
-          [%e (mkident ~loc dat)] [%e (mkident ~loc off)] [%e (mkident ~loc len)] [%e l])]
-          [@metaloc loc]
-      | Some (size), Some (Sign.Signed), Some (Endian.Little) when size >= 17 && size <= 32 ->
-          [%expr (Bitstring.extract_int32_le_signed
-          [%e (mkident ~loc dat)] [%e (mkident ~loc off)] [%e (mkident ~loc len)] [%e l])]
-          [@metaloc loc]
-      | Some (size), Some (Sign.Unsigned), Some (Endian.Little) when size >= 17 && size <= 32 ->
-          [%expr (Bitstring.extract_int32_le_unsigned
-          [%e (mkident ~loc dat)] [%e (mkident ~loc off)] [%e (mkident ~loc len)] [%e l])]
-          [@metaloc loc]
-      | Some (size), Some (Sign.Signed), Some (Endian.Native) when size >= 17 && size <= 32 ->
-          [%expr (Bitstring.extract_int32_ne_signed
-          [%e (mkident ~loc dat)] [%e (mkident ~loc off)] [%e (mkident ~loc len)] [%e l])]
-          [@metaloc loc]
-      | Some (size), Some (Sign.Unsigned), Some (Endian.Native) when size >= 17 && size <= 32 ->
-          [%expr (Bitstring.extract_int32_ne_unsigned
-          [%e (mkident ~loc dat)] [%e (mkident ~loc off)] [%e (mkident ~loc len)] [%e l])]
-          [@metaloc loc]
-      | Some (size), Some (Sign.Signed), Some (Endian.Referred r) when size >= 17 && size <= 32 ->
-          [%expr (Bitstring.extract_int32_ee_signed
-          [%e r] [%e (mkident ~loc dat)] [%e (mkident ~loc off)] [%e (mkident ~loc len)] [%e l])]
-          [@metaloc loc]
-      | Some (size), Some (Sign.Unsigned), Some (Endian.Referred r) when size >= 17 && size <= 32 ->
-          [%expr (Bitstring.extract_int32_ee_unsigned
-          [%e r] [%e (mkident ~loc dat)] [%e (mkident ~loc off)] [%e (mkident ~loc len)] [%e l])]
-          [@metaloc loc]
-      (* 64-bit type *)
-      | Some (size), Some (Sign.Signed), Some (Endian.Big) when size >= 33 && size <= 64 ->
-          [%expr (Bitstring.extract_int64_be_signed
-          [%e (mkident ~loc dat)] [%e (mkident ~loc off)] [%e (mkident ~loc len)] [%e l])]
-          [@metaloc loc]
-      | Some (size), Some (Sign.Unsigned), Some (Endian.Big) when size >= 33 && size <= 64 ->
-          [%expr (Bitstring.extract_int64_be_unsigned
-          [%e (mkident ~loc dat)] [%e (mkident ~loc off)] [%e (mkident ~loc len)] [%e l])]
-          [@metaloc loc]
-      | Some (size), Some (Sign.Signed), Some (Endian.Little) when size >= 33 && size <= 64 ->
-          [%expr (Bitstring.extract_int64_le_signed
-          [%e (mkident ~loc dat)] [%e (mkident ~loc off)] [%e (mkident ~loc len)] [%e l])]
-          [@metaloc loc]
-      | Some (size), Some (Sign.Unsigned), Some (Endian.Little) when size >= 33 && size <= 64 ->
-          [%expr (Bitstring.extract_int64_le_unsigned
-          [%e (mkident ~loc dat)] [%e (mkident ~loc off)] [%e (mkident ~loc len)] [%e l])]
-          [@metaloc loc]
-      | Some (size), Some (Sign.Signed), Some (Endian.Native) when size >= 33 && size <= 64 ->
-          [%expr (Bitstring.extract_int64_ne_signed
-          [%e (mkident ~loc dat)] [%e (mkident ~loc off)] [%e (mkident ~loc len)] [%e l])]
-          [@metaloc loc]
-      | Some (size), Some (Sign.Unsigned), Some (Endian.Native) when size >= 33 && size <= 64 ->
-          [%expr (Bitstring.extract_int64_ne_unsigned
-          [%e (mkident ~loc dat)] [%e (mkident ~loc off)] [%e (mkident ~loc len)] [%e l])]
-          [@metaloc loc]
-      | Some (size), Some (Sign.Signed), Some (Endian.Referred r) when size >= 33 && size <= 64 ->
-          [%expr (Bitstring.extract_int64_ee_signed
-          [%e r] [%e (mkident ~loc dat)] [%e (mkident ~loc off)] [%e (mkident ~loc len)] [%e l])]
-          [@metaloc loc]
-      | Some (size), Some (Sign.Unsigned), Some (Endian.Referred r) when size >= 33 && size <= 64 ->
-          [%expr (Bitstring.extract_int64_ee_unsigned
-          [%e r] [%e (mkident ~loc dat)] [%e (mkident ~loc off)] [%e (mkident ~loc len)] [%e l])]
-          [@metaloc loc]
+      | Some (size), Some (sign), Some (_) when size >= 2 && size <= 8 ->
+          let ex = sprintf "Bitstring.extract_char_%s" (Sign.to_string sign) in
+          let op = sprintf "%s %s %s %s %d" ex dat off len size in
+          parse_expr ~loc op
+      (* 16|32|64-bit type *)
+      | Some (size), Some (sign), Some (Endian.Referred r) ->
+          let ex = sprintf "Bitstring.extract_%s_ee_%s" (get_inttype ~loc size) (Sign.to_string sign) in
+          let ee = Pprintast.string_of_expression r in
+          let op = sprintf "%s (%s) %s %s %s %d" ex ee dat off len size in
+          parse_expr ~loc op
+      | Some (size), Some (sign), Some (endian) ->
+          let tp = get_inttype ~loc size in
+          let en = Endian.to_string endian in
+          let sn = Sign.to_string sign in
+          let ex = sprintf "Bitstring.extract_%s_%s_%s" tp en sn in
+          let op = sprintf "%s %s %s %s %d" ex dat off len size in
+          parse_expr ~loc op
       (* Variable size *)
-      | None, Some (Sign.Signed), Some (Endian.Big) ->
-          [%expr (Bitstring.extract_int64_be_signed
-          [%e (mkident ~loc dat)] [%e (mkident ~loc off)] [%e (mkident ~loc len)] [%e l])]
-          [@metaloc loc]
-      | None, Some (Sign.Unsigned), Some (Endian.Big) ->
-          [%expr (Bitstring.extract_int64_be_unsigned
-          [%e (mkident ~loc dat)] [%e (mkident ~loc off)] [%e (mkident ~loc len)] [%e l])]
-          [@metaloc loc]
-      | None, Some (Sign.Signed), Some (Endian.Little) ->
-          [%expr (Bitstring.extract_int64_le_signed
-          [%e (mkident ~loc dat)] [%e (mkident ~loc off)] [%e (mkident ~loc len)] [%e l])]
-          [@metaloc loc]
-      | None, Some (Sign.Unsigned), Some (Endian.Little) ->
-          [%expr (Bitstring.extract_int64_le_unsigned
-          [%e (mkident ~loc dat)] [%e (mkident ~loc off)] [%e (mkident ~loc len)] [%e l])]
-          [@metaloc loc]
-      | None, Some (Sign.Signed), Some (Endian.Native) ->
-          [%expr (Bitstring.extract_int64_ne_signed
-          [%e (mkident ~loc dat)] [%e (mkident ~loc off)] [%e (mkident ~loc len)] [%e l])]
-          [@metaloc loc]
-      | None, Some (Sign.Unsigned), Some (Endian.Native) ->
-          [%expr (Bitstring.extract_int64_ne_unsigned
-          [%e (mkident ~loc dat)] [%e (mkident ~loc off)] [%e (mkident ~loc len)] [%e l])]
-          [@metaloc loc]
-      | None, Some (Sign.Signed), Some (Endian.Referred r) ->
-          [%expr (Bitstring.extract_int64_ee_signed
-          [%e r] [%e (mkident ~loc dat)] [%e (mkident ~loc off)] [%e (mkident ~loc len)] [%e l])]
-          [@metaloc loc]
-      | None, Some (Sign.Unsigned), Some (Endian.Referred r) ->
-          [%expr (Bitstring.extract_int64_ee_unsigned
-          [%e r] [%e (mkident ~loc dat)] [%e (mkident ~loc off)] [%e (mkident ~loc len)] [%e l])]
-          [@metaloc loc]
+      | None, Some (sign), Some (Endian.Referred r) ->
+          let ex = sprintf "Bitstring.extract_int64_ee_%s" (Sign.to_string sign) in
+          let ee = Pprintast.string_of_expression r in
+          let ln = Pprintast.string_of_expression l in
+          let op = sprintf "%s (%s) %s %s %s (%s)" ex ee dat off len ln in
+          parse_expr ~loc op
+      | None, Some (sign), Some (endian) ->
+          let ex = sprintf "Bitstring.extract_int64_%s_%s" (Endian.to_string endian) (Sign.to_string sign) in
+          let ln = Pprintast.string_of_expression l in
+          let op = sprintf "%s %s %s %s (%s)" ex dat off len ln in
+          parse_expr ~loc op
       (* Invalid type *)
       | _, _, _ ->
           raise (location_exn ~loc "Invalid type")
