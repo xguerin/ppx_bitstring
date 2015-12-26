@@ -11,6 +11,7 @@ a drop-in replacement of the `ocamlp4` extension.
 
     $ opam pin add ppx_bitstring . -n
     $ opam install ppx_bitstring --verbose
+    $ ocamlfind ocamlopt -linkpkg -thread -package core,bitstring,ppx_bitstring.match main.ml -o main.native
 
 ## Syntax
 
