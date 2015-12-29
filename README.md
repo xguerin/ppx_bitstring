@@ -9,8 +9,7 @@ a drop-in replacement of the `ocamlp4` extension.
 
 ## Usage
 
-    $ opam pin add ppx_bitstring . -n
-    $ opam install ppx_bitstring --verbose
+    $ opam pin add -k git ppx_bitstring https://github.com/xguerin/ppx_bitstring
     $ ocamlfind ocamlopt -linkpkg -thread -package core,bitstring,ppx_bitstring.match main.ml -o main.native
 
 ## Syntax
