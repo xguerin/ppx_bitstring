@@ -266,7 +266,7 @@ let rec evaluate_expr = function
 (* Parsing fields *)
 
 let parse_fields ~loc str =
-  let e = List.fold_right ~init:[] ~f:(fun e acc -> [Bytes.trim e] @ acc) (String.split ~on:':' str) in
+  let e = List.fold_right ~init:[] ~f:(fun e acc -> [StdLabels.Bytes.trim e] @ acc) (String.split ~on:':' str) in
   match e with
   | [ "_" as pat ] ->
       (parse_pattern ~loc pat, None, None)
