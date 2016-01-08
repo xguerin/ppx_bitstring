@@ -1,9 +1,13 @@
-all:
-	ocamlfind ocamlopt -package compiler-libs.common,bitstring,core,ppx_tools.metaquot -linkpkg -thread -o ppx_bitstring.ext ppx_bitstring.ml
+all: lib 
 
-install:
-	mkdir -p $(PREFIX)/lib/ppx_bitstring
-	cp ppx_bitstring.ext META $(PREFIX)/lib/ppx_bitstring/
+lib:
+	make -C src
+
+tests:
 
 clean:
-	rm -f *.cm* *.o ppx_bitstring.ext
+	make -C src clean
+	make -C tests clean
+
+install:
+	make -C src install
