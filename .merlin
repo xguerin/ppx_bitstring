@@ -1,4 +1,4 @@
-PKG core compiler-libs.common ppx_tools.metaquot ppx_bitstring.match bitstring
+PKG core compiler-libs.common ppx_tools.metaquot ppx_bitstring.ext bitstring
 
 S .
 B _build
