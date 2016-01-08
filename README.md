@@ -17,6 +17,8 @@ $ ocamlfind ocamlopt -linkpkg -thread -package core,bitstring,ppx_bitstring.ext 
 
 ## Syntax
 
+Usage example with the `match` PPX extension:
+
 ```ocaml
 match%bitstring bs with
 | {|
@@ -27,6 +29,8 @@ match%bitstring bs with
   |} -> (* Do something *)
 | {| _ |} -> (* Do something else *)
 ```
+
+The format of the cases being the same as the original `bitstring`, please refer to its [documentation](http://people.redhat.com/~rjones/bitstring/html/Bitstring.html).
 
 ## License
 
