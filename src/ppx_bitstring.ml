@@ -86,24 +86,25 @@ let mksym =
     incr i; let i = !i in
     sprintf "__ppxbitstring_%s_%d" name i
 
-let mkpatvar ~loc name =
-  { (Parse.pattern (Lexing.from_string name)) with ppat_loc = loc }
+let mkpatvar name =
+  Ast_convenience.pvar name
 
-let mkident ~loc name =
-  { (Parse.expression (Lexing.from_string name)) with pexp_loc = loc }
+let mkident name =
+  Ast_convenience.evar name
 
 let rec process_loc ~loc expr =
   match expr with
   | { pexp_desc = Pexp_tuple(ops) } ->
-    let fld = List.fold ~init:[]
+    let fld = List.fold
+        ~init:[]
         ~f:(fun acc exp -> acc @ [ process_loc ~loc exp ]) ops
-    in
-    { expr with pexp_desc = Pexp_tuple(fld); pexp_loc = loc }
+    in { expr with pexp_desc = Pexp_tuple(fld); pexp_loc = loc }
   | { pexp_desc = Pexp_apply(ident, ops) } ->
-    let fld = List.fold ~init:[]
+    let fld = List.fold
+        ~init:[]
         ~f:(fun acc (lbl, exp) -> acc @ [ (lbl, (process_loc ~loc exp)) ]) ops
-    in
-    { expr with pexp_desc = Pexp_apply(ident, fld); pexp_loc = loc }
+    in { expr with pexp_desc = Pexp_apply(ident, fld); pexp_loc = loc }
+  | { pexp_desc = Pexp_construct(_) }
   | { pexp_desc = Pexp_ident(_) }
   | { pexp_desc = Pexp_constant(_) } ->
     { expr with pexp_loc = loc }
@@ -267,7 +268,7 @@ let rec evaluate_expr = function
 
 (* Parsing fields *)
 
-let parse_fields ~loc str =
+let parse_match_fields ~loc str =
   let e = List.fold_right
       ~init:[]
       ~f:(fun e acc -> [StdLabels.Bytes.trim e] @ acc)
@@ -276,12 +277,28 @@ let parse_fields ~loc str =
   | [ "_" as pat ] ->
     (parse_pattern ~loc pat, None, None)
   | [ pat; len ] ->
-    (parse_pattern ~loc pat, Some (parse_expr ~loc len), Some Qualifiers.default)
+    let q = Some Qualifiers.default in
+    (parse_pattern ~loc pat, Some (parse_expr ~loc len), q)
   | [ pat; len; quals ] ->
-    (parse_pattern ~loc pat, Some (parse_expr ~loc len), Some (Qualifiers.set_defaults (parse_quals ~loc quals)))
-  | _ -> location_exn ~loc ("Format error: " ^ str)
+    let q = Some (Qualifiers.set_defaults (parse_quals ~loc quals)) in
+    (parse_pattern ~loc pat, Some (parse_expr ~loc len), q)
+  | _ -> location_exn ~loc ("Format error: \"" ^ str ^ "\"")
 
-(* Generators *)
+let parse_const_fields ~loc str =
+  let e = List.fold_right
+      ~init:[]
+      ~f:(fun e acc -> [StdLabels.Bytes.trim e] @ acc)
+      (String.split ~on:':' str)
+  in match e with
+  | [ vl; len ] ->
+    let q = Some Qualifiers.default in
+    (parse_expr ~loc vl, Some (parse_expr ~loc len), q)
+  | [ vl; len; quals ] ->
+    let q = Some (Qualifiers.set_defaults (parse_quals ~loc quals)) in
+    (parse_expr ~loc vl, Some (parse_expr ~loc len), q)
+  | _ -> location_exn ~loc ("Format error: \"" ^ str ^ "\"")
+
+(* Match generators *)
 
 let check_field_len ~loc (l, q) =
   let open Option.Monad_infix in
@@ -310,23 +327,22 @@ let get_inttype ~loc = function
 let gen_extractor (dat, off, len) (l, q) loc =
   let open Qualifiers in
   match q.value_type with
-  | Some (Type.Bitstring) ->
-    [%expr ([%e (mkident ~loc dat)],
-            [%e (mkident ~loc off)],
-            [%e (mkident ~loc len)])]
-      [@metaloc loc]
+  | Some (Type.Bitstring) -> begin
+      match (evaluate_expr l) with
+      | Some (-1) ->
+          [%expr ([%e (mkident dat)], [%e (mkident off)], [%e (mkident len)])]
+      | Some (_) | None ->
+          [%expr ([%e (mkident dat)], [%e (mkident off)], [%e l])]
+    end
   | Some (Type.String) ->
-    [%expr (Bitstring.string_of_bitstring ([%e (mkident ~loc dat)]
-                                             [%e (mkident ~loc off)]
-                                             [%e (mkident ~loc len)]))]
-      [@metaloc loc]
+    [%expr (Bitstring.string_of_bitstring ([%e (mkident dat)],
+                                           [%e (mkident off)], [%e l]))]
   | Some (Type.Int) ->
     begin match (evaluate_expr l), q.sign, q.endian with
       (* 1-bit type *)
       | Some (size), Some (_), Some (_) when size = 1 ->
-        [%expr if (Bitstring.extract_bit [%e (mkident ~loc dat)] [%e (mkident ~loc off)]
-                     [%e (mkident ~loc len)] [%e l]) then 1 else 0]
-          [@metaloc loc]
+        [%expr if (Bitstring.extract_bit [%e (mkident dat)] [%e (mkident off)]
+                     [%e (mkident len)] [%e l]) then true else false]
       (* 8-bit type *)
       | Some (size), Some (sign), Some (_) when size >= 2 && size <= 8 ->
         let ex = sprintf "Bitstring.extract_char_%s" (Sign.to_string sign) in
@@ -373,42 +389,46 @@ let gen_value (dat, off, len) (l, q) loc =
   | None -> gen_extractor (dat, off, len) (l, q) loc
 
 let rec gen_next org_off ~loc (dat, off, len) (p, l, q) beh fields =
-  [%expr let [%p (mkpatvar ~loc off)] = [%e (mkident ~loc off)] + [%e l]
-    and [%p (mkpatvar ~loc len)] = [%e (mkident ~loc len)] - [%e l] in
-    [%e (gen_fields org_off ~loc (dat, off, len) beh fields)]]
-    [@metaloc loc]
+  match (evaluate_expr l) with
+  | Some (-1) ->
+    [%expr let [%p (mkpatvar off)] = [%e (mkident off)] + [%e (mkident len)]
+      and [%p (mkpatvar len)] = 0 in
+      [%e (gen_fields org_off ~loc (dat, off, len) beh fields)]]
+  | Some (_) | None ->
+    [%expr let [%p (mkpatvar off)] = [%e (mkident off)] + [%e l]
+      and [%p (mkpatvar len)] = [%e (mkident len)] - [%e l] in
+      [%e (gen_fields org_off ~loc (dat, off, len) beh fields)]]
 
 and gen_next_all ~loc org_off (dat, off, len) beh fields =
-  [%expr let [%p (mkpatvar ~loc off)] = [%e (mkident ~loc off)] + [%e (mkident ~loc len)]
-    and [%p (mkpatvar ~loc len)] = 0 in
+  [%expr let [%p (mkpatvar off)] = [%e (mkident off)] + [%e (mkident len)]
+    and [%p (mkpatvar len)] = 0 in
     [%e (gen_fields org_off ~loc (dat, off, len) beh fields)]]
-    [@metaloc loc]
 
 and gen_match org_off (dat, off, len) (p, l, q) loc beh fields =
   let open Qualifiers in
   let valN = mksym "value" in
   let m = match q.check with
     | Some chk ->
-      [%expr begin match [%e (mkident ~loc valN)] with
-             | [%p p] when [%e chk] -> [%e (gen_fields org_off ~loc (dat, off, len) beh fields)]
-             | _ -> () end] [@metaloc loc]
+      [%expr begin match [%e (mkident valN)] with
+             | [%p p] when [%e chk] ->
+               [%e (gen_fields org_off ~loc (dat, off, len) beh fields)]
+             | _ -> () end]
     | None ->
-      [%expr begin match [%e (mkident ~loc valN)] with
-             | [%p p] when true  -> [%e (gen_fields ~loc org_off (dat, off, len) beh fields)]
-             | _ -> () end] [@metaloc loc]
+      [%expr begin match [%e (mkident valN)] with
+             | [%p p] when true ->
+               [%e (gen_fields ~loc org_off (dat, off, len) beh fields)]
+             | _ -> () end]
   in
-  [%expr let [%p (mkpatvar ~loc valN)] = [%e (gen_value (dat, off, len) (l, q) loc)] in
-         let [%p (mkpatvar ~loc off)] = [%e (mkident ~loc off)] + [%e l]
-         and [%p (mkpatvar ~loc len)] = [%e (mkident ~loc len)] - [%e l] in [%e m]]
-    [@metaloc loc]
+  [%expr let [%p (mkpatvar valN)] = [%e (gen_value (dat, off, len) (l, q) loc)] in
+         let [%p (mkpatvar off)] = [%e (mkident off)] + [%e l]
+         and [%p (mkpatvar len)] = [%e (mkident len)] - [%e l] in [%e m]]
 
 and gen_offset_saver org_off (dat, off, len) (p, l, q) loc beh =
   let open Qualifiers in
   match q.save_offset_to with
   | Some { pexp_desc = Pexp_ident ({ txt; _ }) } -> [%expr
-    let [%p (mkpatvar ~loc (Longident.last txt))] =
-      [%e (mkident ~loc off)] - [%e (mkident ~loc org_off)]
-    in [%e beh]] [@metaloc loc]
+    let [%p (mkpatvar (Longident.last txt))] =
+      [%e (mkident off)] - [%e (mkident org_off)] in [%e beh]]
   | Some _ | None -> beh
 
 and gen_fields_with_quals ~loc org_off (dat, off, len) (p, l, q) beh fields =
@@ -420,11 +440,9 @@ and gen_fields_with_quals ~loc org_off (dat, off, len) (p, l, q) beh fields =
         gen_offset_saver org_off (dat, off, len) (p, l, q) loc [%expr
           let [%p p] = [%e (gen_value (dat, off, len) (l, q) loc)] in
           [%e (gen_next_all ~loc org_off (dat, off, len) beh fields)]]
-          [@metaloc loc]
       | [%pat? _ ] ->
         gen_offset_saver org_off (dat, off, len) (p, l, q) loc [%expr
           [%e (gen_next_all org_off ~loc (dat, off, len) beh fields)]]
-          [@metaloc loc]
       | _ ->
         location_exn ~loc "Unbound string or bitstring can only be assigned to a variable or skipped"
     end
@@ -432,37 +450,32 @@ and gen_fields_with_quals ~loc org_off (dat, off, len) (p, l, q) beh fields =
     begin match p with
       | { ppat_desc = Ppat_var(_) } ->
         gen_offset_saver org_off (dat, off, len) (p, l, q) loc [%expr
-          if [%e (mkident ~loc len)] >= [%e l] then
+          if [%e (mkident len)] >= [%e l] then
             let [%p p] = [%e (gen_value (dat, off, len) (l, q) loc)] in
             [%e (gen_next ~loc org_off (dat, off, len) (p, l, q) beh fields)]
           else ()]
-          [@metaloc loc]
       | [%pat? _ ] ->
         gen_offset_saver org_off (dat, off, len) (p, l, q) loc [%expr
-          if [%e (mkident ~loc len)] >= [%e l] then
+          if [%e (mkident len)] >= [%e l] then
             [%e (gen_next ~loc org_off (dat, off, len) (p, l, q) beh fields)]
           else ()]
-          [@metaloc loc]
       | _ -> location_exn ~loc "Bound bitstring can only be assigned to variables or skipped"
     end
   | (Some (_) | None), Some (Type.String) ->
     gen_offset_saver org_off (dat, off, len) (p, l, q) loc [%expr
-      if [%e (mkident ~loc len)] >= [%e l] then
+      if [%e (mkident len)] >= [%e l] then
         [%e (gen_match org_off (dat, off, len) (p, l, q) loc beh fields)]
       else ()]
-      [@metaloc loc]
   | Some (_), Some (Type.Int) ->
     gen_offset_saver org_off (dat, off, len) (p, l, q) loc [%expr
-      if [%e (mkident ~loc len)] >= [%e l] then
+      if [%e (mkident len)] >= [%e l] then
         [%e (gen_match org_off (dat, off, len) (p, l, q) loc beh fields)]
       else ()]
-      [@metaloc loc]
   | None, Some (Type.Int) ->
     gen_offset_saver org_off (dat, off, len) (p, l, q) loc [%expr
-      if [%e l] >= 1 && [%e l] <= 64 && [%e (mkident ~loc len)] >= [%e l] then
+      if [%e l] >= 1 && [%e l] <= 64 && [%e (mkident len)] >= [%e l] then
         [%e (gen_match org_off (dat, off, len) (p, l, q) loc beh fields)]
       else ()]
-      [@metaloc loc]
   | _, _ -> location_exn ~loc "No type to generate"
 
 and gen_fields ~loc org_off (dat, off, len) beh fields =
@@ -478,10 +491,9 @@ let gen_case org_off res (dat, off, len) case =
   let loc = case.pc_lhs.ppat_loc in
   match case.pc_lhs.ppat_desc with
   | Ppat_constant (Const_string (value, _)) ->
-    let beh = [%expr [%e (mkident ~loc res)] :=
-                       Some ([%e case.pc_rhs]); raise Exit] [@metaloc loc]
+    let beh = [%expr [%e (mkident res)] := Some ([%e case.pc_rhs]); raise Exit]
     in List.map
-      ~f:(fun flds -> parse_fields ~loc flds)
+      ~f:(fun flds -> parse_match_fields ~loc flds)
       (String.split ~on:';' value)
     |> gen_fields ~loc org_off (dat, off, len) beh
   | _ -> location_exn ~loc "Wrong pattern type in bitmatch case"
@@ -503,43 +515,194 @@ let gen_cases ident loc cases =
     | hd :: tl -> Exp.sequence hd (build_seq tl)
   in
   let seq = build_seq stmts in
-  let tuple = [%pat? ([%p (mkpatvar ~loc datN)],
-                      [%p (mkpatvar ~loc offN)],
-                      [%p (mkpatvar ~loc lenN)])] in
+  let tuple = [%pat? ([%p (mkpatvar datN)],
+                      [%p (mkpatvar offN)],
+                      [%p (mkpatvar lenN)])] in
   let fname = Exp.constant ~loc (Const_string (loc.loc_start.pos_fname, None)) in
   let lpos = Exp.constant ~loc (Const_int loc.loc_start.pos_lnum) in
   let cpos = Exp.constant ~loc (Const_int loc.loc_start.pos_cnum) in
   [%expr
     let [%p tuple] = [%e ident] in
-    let [%p (mkpatvar ~loc offNN)] = [%e (mkident ~loc offN)]
-    and [%p (mkpatvar ~loc lenNN)] = [%e (mkident ~loc lenN)]
+    let [%p (mkpatvar offNN)] = [%e (mkident offN)]
+    and [%p (mkpatvar lenNN)] = [%e (mkident lenN)]
     in
-    let [%p (mkpatvar ~loc algN)] = ([%e (mkident ~loc offN)] land 7) = 0 in
-    let [%p (mkpatvar ~loc resN)] = ref None in
+    let [%p (mkpatvar algN)] = ([%e (mkident offN)] land 7) = 0 in
+    let [%p (mkpatvar resN)] = ref None in
     (try [%e seq]; with | Exit -> ());
-    match ![%e (mkident ~loc resN)] with
+    match ![%e (mkident resN)] with
     | Some x -> x
     | None -> raise (Match_failure ([%e fname], [%e lpos], [%e cpos]))]
-    [@metaloc loc]
 
-let ppx_bitstring_mapper argv =
-  { default_mapper with expr = fun mapper expr ->
-        match expr with
-        (* Is this an extension node? *)
-        | { pexp_desc = Pexp_extension ({ txt = "bitstring"; loc }, pstr) } ->
-          begin match pstr with
-            (* Evaluation of a match expression *)
-            | PStr [{
-                pstr_desc = Pstr_eval (
-                    { pexp_loc = loc;
-                      pexp_desc = Pexp_match (ident, cases) },
-                    _)
-              }] -> gen_cases ident loc cases
-            (* Unsupported expression *)
-            | _ -> raise (location_exn ~loc "Unsupported operator")
-          end
-        (* Delegate to the default mapper. *)
-        | x -> default_mapper.expr mapper x;
-  }
+(* Let generators *)
+
+let gen_constructor loc sym = function
+  | (l, Some (s), Some(q)) ->
+    let open Location in
+    let open Qualifiers in
+    let exc = Ast_convenience.constr "Bitstring.Construct_failure"
+        [ Ast_convenience.str "Bad field value";
+          Ast_convenience.str "None";
+          Ast_convenience.int loc.loc_start.pos_lnum;
+          Ast_convenience.int loc.loc_start.pos_cnum ] in begin
+      match q.value_type with
+      | Some (Type.Bitstring) ->
+        let ex = "Bitstring.construct_bitstring" in
+        Ast_convenience.app (Ast_convenience.evar ex)
+          [ (Ast_convenience.evar sym); l ]
+      | Some (Type.String) ->
+        let ex = "Bitstring.construct_string" in
+        Ast_convenience.app (Ast_convenience.evar ex)
+          [ (Ast_convenience.evar sym); l ]
+      | Some (Type.Int) -> begin
+          match (evaluate_expr s), q.sign, q.endian with
+          (* 1-bit type *)
+          | Some (size), Some (_), Some (_) when size = 1 -> begin
+              let ex = "Bitstring.construct_bit" in
+              let vl = match (evaluate_expr l) with
+                | Some (1) -> Ast_convenience.constr "true" []
+                | Some (0) -> Ast_convenience.constr "false" []
+                | Some (_) | None ->
+                  raise (location_exn ~loc "Invalid value for bit size")
+              in Ast_convenience.app (Ast_convenience.evar ex)
+                [ (Ast_convenience.evar sym); vl; (Ast_convenience.int 1); exc ]
+            end
+          (* 8-bit type *)
+          | Some (size), Some (sign), Some (_) when size >= 2 && size <= 8 ->
+            let sn = Sign.to_string sign in
+            let ex = sprintf "Bitstring.construct_char_%s" sn in
+            Ast_convenience.app (Ast_convenience.evar ex)
+              [ (Ast_convenience.evar sym); l; (Ast_convenience.int size); exc ]
+          (* 16|32|64-bit type *)
+          | Some (size), Some (sign), Some (Endian.Referred r) ->
+            let ss = Sign.to_string sign and it = get_inttype ~loc size in
+            let ex = sprintf "Bitstring.construct_%s_ee_%s" it ss in
+            Ast_convenience.app (Ast_convenience.evar ex)
+              [ r; (Ast_convenience.evar sym); l; (Ast_convenience.int size); exc ]
+          | Some (size), Some (sign), Some (endian) ->
+            let tp = get_inttype ~loc size in
+            let en = Endian.to_string endian in
+            let sn = Sign.to_string sign in
+            let ex = sprintf "Bitstring.construct_%s_%s_%s" tp en sn in
+            Ast_convenience.app (Ast_convenience.evar ex)
+              [ (Ast_convenience.evar sym); l; (Ast_convenience.int size); exc ]
+          (* Invalid type *)
+          | _, _, _ ->
+            raise (location_exn ~loc "Invalid type")
+        end
+      | _ -> raise (location_exn ~loc "Invalid type")
+    end
+  | _ -> raise (location_exn ~loc "Invalid field format")
+
+let rec gen_assignment_size loc = function
+  | []
+  | [(_, None, _)] -> [%expr 0]
+  | [(_, Some (s), _)] -> begin
+      match (evaluate_expr s) with
+      | Some (v) -> if v <= 0 then
+          raise (location_exn ~loc "Negative or null field size in constructor")
+        else s
+      | None -> s
+    end
+  | (_, None, _) :: tl ->
+    gen_assignment_size loc tl
+  | (_, Some (s), _) :: tl -> begin
+      match (evaluate_expr s) with
+      | Some (v) -> if v <= 0 then
+          raise (location_exn ~loc "Negative or null field size in constructor")
+        else
+          let next = gen_assignment_size loc tl in
+          [%expr [%e s] + ([%e next])]
+      | None -> raise (location_exn ~loc "Invalid field size in constructor")
+    end
+
+let gen_assignment_behavior loc sym fields =
+  let size = gen_assignment_size loc fields in
+  let ref = Ast_convenience.evar "Bitstring.Buffer.contents" in
+  let res = (Ast_convenience.evar sym) in
+  let rep = Ast_convenience.app ref [ res ] in
+  let post = match (evaluate_expr size) with
+    | Some (v) ->
+      let vexpr = Ast_convenience.int v in
+      [%expr let _res = [%e rep] in
+             if (Bitstring.bitstring_length _res) == [%e vexpr]
+             then _res else raise Exit]
+    | None ->
+      [%expr let _res = [%e rep] in
+             if (Bitstring.bitstring_length _res) == [%e size]
+             then _res else raise Exit]
+  in
+  let exprs = List.fold_right
+      ~f:(fun fld acc -> [ (gen_constructor loc sym fld) ] @ acc)
+      ~init:[post]
+      fields in
+  let seq = (Ast_convenience.sequence exprs) in
+  let ecl = Ast_convenience.evar "Bitstring.Buffer.create" in
+  let ini = Ast_convenience.app ecl [ (Ast_convenience.unit ()) ] in
+  let res = mkpatvar sym in
+  [%expr let [%p res] = [%e ini] in [%e seq]]
+
+let parse_assignment_behavior loc sym expr =
+  match expr with
+  | Pexp_constant (Const_string (value, _)) ->
+    List.map
+      ~f:(fun flds -> parse_const_fields ~loc flds)
+      (String.split ~on:';' value)
+    |> gen_assignment_behavior loc sym
+  | _ -> location_exn ~loc "Wrong pattern type in bitmatch constructor"
+
+let gen_functional_assignment loc ast expr =
+  match ast.pvb_pat.ppat_desc with
+  | Parsetree.Ppat_var (s) ->
+    let sym = mksym s.txt in
+    let pat = mkpatvar sym in
+    let idt = Ast_convenience.evar sym in
+    let fnc = Exp.apply ~loc idt [ ("", (Ast_convenience.unit ())) ] in
+    let beh = parse_assignment_behavior loc sym ast.pvb_expr.pexp_desc in
+    [%expr let [%p pat] = fun () -> [%e beh] in
+           let [%p ast.pvb_pat] = [%e fnc] in [%e expr]]
+  | _ -> raise (location_exn ~loc "Invalid pattern type")
+
+let rec gen_unrolled_let loc expr = function
+  | [] -> expr
+  | [hd] ->
+    gen_functional_assignment loc hd expr
+  | hd :: tl ->
+    let next = gen_unrolled_let loc expr tl in
+    gen_functional_assignment loc hd next
+
+let gen_let loc bindings expr = function
+  | Asttypes.Recursive ->
+    raise (location_exn ~loc "Recursion not supported")
+  | Asttypes.Nonrecursive ->
+    gen_unrolled_let loc expr bindings
+
+(* Mapper *)
+
+let ppx_bitstring_mapper argv = {
+  default_mapper with expr = fun mapper expr ->
+    match expr with
+    (* Is this an extension node? *)
+    | { pexp_desc = Pexp_extension ({ txt = "bitstring"; loc }, pstr) } -> begin
+        match pstr with
+        (* Evaluation of a match expression *)
+        | PStr [{
+            pstr_desc = Pstr_eval ({
+                pexp_loc = loc;
+                pexp_desc = Pexp_match (ident, cases)
+              }, _)
+          }] -> gen_cases ident loc cases
+        (* Evaluation of a let expression *)
+        | PStr [{
+            pstr_desc = Pstr_eval ({
+                pexp_loc = loc;
+                pexp_desc = Pexp_let (recflg, bindings, expr)
+              }, _)
+          }] -> gen_let loc bindings expr recflg
+        (* Unsupported expression *)
+        | _ -> raise (location_exn ~loc "Unsupported operator")
+      end
+    (* Delegate to the default mapper. *)
+    | x -> default_mapper.expr mapper x;
+}
 
 let () = register "ppx_bitstring" ppx_bitstring_mapper

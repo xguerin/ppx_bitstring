@@ -32,6 +32,20 @@ match%bitstring bs with
 
 The format of the cases being the same as the original `bitstring`, please refer to its [documentation](http://people.redhat.com/~rjones/bitstring/html/Bitstring.html).
 
+## Contribute
+
+To see the parse tree of a ML file:
+
+```bash
+ocamlc -dparsetree foo.ml
+```
+
+To see the output of a development version of the extension:
+
+```bash
+ocamlfind opt -package bitstring,core -thread -dsource -ppx ./ppx_bitstring.ext foo.ml
+```
+
 ## License
 
 This program is free software: you can redistribute it and/or modify it under the terms of the GNU General Public License as published by the Free Software Foundation, either version 3 of the License, or (at your option) any later version.

@@ -1,6 +1,0 @@
-ts_sec : 32 : endian (e); (* packet timestamp seconds *)
-ts_usec : 32 : endian (e);  (* packet timestamp microseconds *)
-incl_len : 32 : endian (e); (* packet length saved in this file *)
-orig_len : 32 : endian (e); (* packet length originally on wire *)
-pkt_data : Int32.to_int incl_len*8 : bitstring;
-rest : -1 : bitstring

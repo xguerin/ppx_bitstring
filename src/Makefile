@@ -1,5 +1,5 @@
-COMPILER = ocamlfind ocamlopt
-FLAGS		 = -package compiler-libs.common,bitstring,core,ppx_tools.metaquot -linkpkg -thread 
+COMPILER = $(HOME)/.opam/system/bin/ocamlfind ocamlopt
+FLAGS    = -package compiler-libs.common,bitstring,core,ppx_tools.metaquot -linkpkg -thread 
 SOURCES	 = ppx_bitstring.ml
 TARGET	 = ppx_bitstring.ext
 

@@ -2,6 +2,7 @@ all: lib
 
 lib:
 	make -C src
+	make -C tests
 
 tests:
 

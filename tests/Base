@@ -1,8 +1,0 @@
-((0xa1b2c3d4_l|0xd4c3b2a1_l) as magic) : 32; (* magic number *)
-major : 16 : endian (endian_of magic);     (* version *)
-minor : 16 : endian (endian_of magic);
-timezone : 32 : endian (endian_of magic);  (* timezone correction (secs)*)
-_ : 32 : endian (endian_of magic); (* always 0 apparently *)
-snaplen : 32 : endian (endian_of magic);  (* max length of capt pckts *)
-network : 32 : endian (endian_of magic);  (* data link layer type *)
-rest : -1 : bitstring
