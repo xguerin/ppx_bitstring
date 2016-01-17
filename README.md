@@ -30,6 +30,17 @@ match%bitstring bs with
 | {| _ |} -> (* Do something else *)
 ```
 
+Usage example with the `let` PPX extension:
+
+```ocaml
+let%bitstring bs = {|
+    1 : 1;
+    a : 2;
+    b : 16 : bigendian;
+    ...
+  |} in (* Do something here *)
+```
+
 The format of the cases being the same as the original `bitstring`, please refer to its [documentation](http://people.redhat.com/~rjones/bitstring/html/Bitstring.html).
 
 ## Contribute
