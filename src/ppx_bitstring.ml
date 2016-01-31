@@ -104,13 +104,7 @@ let rec process_loc ~loc expr =
         ~init:[]
         ~f:(fun acc (lbl, exp) -> acc @ [ (lbl, (process_loc ~loc exp)) ]) ops
     in { expr with pexp_desc = Pexp_apply(ident, fld); pexp_loc = loc }
-  | { pexp_desc = Pexp_construct(_) }
-  | { pexp_desc = Pexp_ident(_) }
-  | { pexp_desc = Pexp_constant(_) } ->
-    { expr with pexp_loc = loc }
-  | _ ->
-    fprintf stderr "%s\n" (Pprintast.string_of_expression expr);
-    expr
+  | _ -> { expr with pexp_loc = loc }
 
 let parse_expr ~loc str =
   process_loc ~loc (Parse.expression (Lexing.from_string str))
