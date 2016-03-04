@@ -1,0 +1,23 @@
+OASISFormat: 0.4
+OCamlVersion: >= 4.01
+Name: ppx_bitstring
+Version: 1.0
+License: LGPL
+Authors: Xavier Guérin
+BuildTools: ocamlbuild
+Plugins: META (0.4), DevFiles (0.4)
+Synopsis: PPX plugin for the OCAML OPAM bitstring package.
+Description: Bitstring: concrete match syntax
+
+Library ppx_bitstring
+  Path: src
+  Modules: Ppx_bitstring
+  XMETAExtraLines:  ppx = "ppx_bitstring"
+  XMETARequires: bitstring, compiler-libs.common, core, ppx_tools.metaquot
+  BuildDepends: compiler-libs.common, core, threads, ppx_tools.metaquot
+
+Executable ppx_bitstring
+  Path: src
+  MainIs: ppx_bitstring.ml
+  BuildDepends: compiler-libs.common, core, threads, ppx_tools.metaquot
+  CompiledObject: best
