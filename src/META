@@ -1,9 +1,9 @@
-version = "0.2"
+version = "1.0.0"
 description = "Bitstring PPX extensions"
 
 package "ext" (
-  version = "0.2"
-  description = "Bitstring: concrete match syntax"
+  version = "1.0.0"
+  description = "Bitstring PPX extensions"
   requires = "bitstring,compiler-libs.common"
   ppx = "./ppx_bitstring.ext"
 )
