@@ -271,7 +271,7 @@ let rec evaluate_expr = function
     end
   | { pexp_desc = Pexp_constant (const) } ->
     begin match const with
-      | Const_int i -> Some i
+      | Pconst_integer(i, _) -> Some (int_of_string i)
       | _ -> None
     end
   | _ -> None
@@ -500,7 +500,7 @@ and gen_fields ~loc org_off (dat, off, len) beh fields =
 let gen_case org_off res (dat, off, len) case =
   let loc = case.pc_lhs.ppat_loc in
   match case.pc_lhs.ppat_desc with
-  | Ppat_constant (Const_string (value, _)) ->
+  | Ppat_constant (Pconst_string (value, _)) ->
     let beh = [%expr [%e (mkident res)] := Some ([%e case.pc_rhs]); raise Exit]
     in List.map
       ~f:(fun flds -> parse_match_fields ~loc flds)
@@ -528,9 +528,9 @@ let gen_cases ident loc cases =
   let tuple = [%pat? ([%p (mkpatvar datN)],
                       [%p (mkpatvar offN)],
                       [%p (mkpatvar lenN)])] in
-  let fname = Exp.constant ~loc (Const_string (loc.loc_start.pos_fname, None)) in
-  let lpos = Exp.constant ~loc (Const_int loc.loc_start.pos_lnum) in
-  let cpos = Exp.constant ~loc (Const_int loc.loc_start.pos_cnum) in
+  let fname = Exp.constant ~loc (Pconst_string (loc.loc_start.pos_fname, None)) in
+  let lpos = Exp.constant ~loc (Pconst_integer (string_of_int loc.loc_start.pos_lnum, None)) in
+  let cpos = Exp.constant ~loc (Pconst_integer (string_of_int loc.loc_start.pos_cnum, None)) in
   [%expr
     let [%p tuple] = [%e ident] in
     let [%p (mkpatvar offNN)] = [%e (mkident offN)]
@@ -653,7 +653,7 @@ let gen_assignment_behavior loc sym fields =
 
 let parse_assignment_behavior loc sym expr =
   match expr with
-  | Pexp_constant (Const_string (value, _)) ->
+  | Pexp_constant (Pconst_string (value, _)) ->
     List.map
       ~f:(fun flds -> parse_const_fields ~loc flds)
       (String.split ~on:';' value)
@@ -666,7 +666,7 @@ let gen_functional_assignment loc ast expr =
     let sym = mksym s.txt in
     let pat = mkpatvar sym in
     let idt = Ast_convenience.evar sym in
-    let fnc = Exp.apply ~loc idt [ ("", (Ast_convenience.unit ())) ] in
+    let fnc = Exp.apply ~loc idt [ (Nolabel, (Ast_convenience.unit ())) ] in
     let beh = parse_assignment_behavior loc sym ast.pvb_expr.pexp_desc in
     [%expr let [%p pat] = fun () -> [%e beh] in
            let [%p ast.pvb_pat] = [%e fnc] in [%e expr]]
