@@ -543,7 +543,7 @@ let gen_cases ident loc cases =
     | Some x -> x
     | None -> raise (Match_failure ([%e fname], [%e lpos], [%e cpos]))]
 
-(* Let generators *)
+(* constructor expressions *)
 
 let gen_constructor loc sym = function
   | (l, Some (s), Some(q)) ->
@@ -663,40 +663,47 @@ let gen_assignment_behavior loc sym fields =
   let res = mkpatvar sym in
   [%expr let [%p res] = [%e ini] in [%e seq]]
 
-let parse_assignment_behavior loc sym expr =
-  match expr with
-  | Pexp_constant (Pconst_string (value, _)) ->
-    List.map
-      ~f:(fun flds -> parse_const_fields ~loc flds)
-      (String.split ~on:';' value)
-    |> gen_assignment_behavior loc sym
-  | _ -> location_exn ~loc "Wrong pattern type in bitmatch constructor"
+let parse_assignment_behavior loc sym value =
+  List.map
+    ~f:(fun flds -> parse_const_fields ~loc flds)
+    (String.split ~on:';' value)
+  |> gen_assignment_behavior loc sym
 
-let gen_functional_assignment loc ast expr =
-  match ast.pvb_pat.ppat_desc with
-  | Parsetree.Ppat_var (s) ->
-    let sym = mksym s.txt in
-    let pat = mkpatvar sym in
-    let idt = Ast_convenience.evar sym in
-    let fnc = Exp.apply ~loc idt [ (Nolabel, (Ast_convenience.unit ())) ] in
-    let beh = parse_assignment_behavior loc sym ast.pvb_expr.pexp_desc in
-    [%expr let [%p pat] = fun () -> [%e beh] in
-           let [%p ast.pvb_pat] = [%e fnc] in [%e expr]]
+let gen_constructor_expr loc value =
+  let sym = mksym "constructor" in
+  let pat = mkpatvar sym in
+  let idt = Ast_convenience.evar sym in
+  let fnc = Exp.apply ~loc idt [ (Nolabel, (Ast_convenience.unit ())) ] in
+  let beh = parse_assignment_behavior loc sym value in
+  [%expr let [%p pat] = fun () -> [%e beh] in [%e fnc] ]
+
+(* transform `let%bitstring foo = {| .. |} in`
+   into      `let foo = [%bitstring {| .. |}] in`
+*)
+
+let transform_single_let ~mapper loc ast expr =
+  eprintf "[transform_single_let:expr] %s\n" (Pprintast.string_of_expression expr);
+  match ast.pvb_pat.ppat_desc, ast.pvb_expr.pexp_desc with
+  | Parsetree.Ppat_var (s), Pexp_constant (Pconst_string (value, _)) ->
+    let pat = mkpatvar s.txt in
+    let extension = {Asttypes.txt = "bitstring"; loc} in
+    let payload =
+      Const.string value
+      |> Exp.constant ~loc
+      |> Str.eval ~loc
+    in
+    let constructor_expr = Exp.extension ~loc (extension, PStr [payload]) in
+    let expr = [%expr let [%p pat] = [%e constructor_expr] in [%e expr]] in
+    eprintf "[transform_single_let:expr post] '%s'\n" (Pprintast.string_of_expression expr);
+    mapper.Ast_mapper.expr mapper expr
   | _ -> raise (location_exn ~loc "Invalid pattern type")
 
-let rec gen_unrolled_let loc expr = function
+let rec transform_let ~mapper loc expr = function
   | [] -> expr
-  | [hd] ->
-    gen_functional_assignment loc hd expr
   | hd :: tl ->
-    let next = gen_unrolled_let loc expr tl in
-    gen_functional_assignment loc hd next
-
-let gen_let loc bindings expr = function
-  | Asttypes.Recursive ->
-    raise (location_exn ~loc "Recursion not supported")
-  | Asttypes.Nonrecursive ->
-    gen_unrolled_let loc expr bindings
+     eprintf "[transform_let] hd :: tl\n";
+     let next = transform_let ~mapper loc expr tl in
+     transform_single_let ~mapper loc hd next
 
 (* Mapper *)
 
@@ -713,13 +720,26 @@ let ppx_bitstring_mapper argv = {
                 pexp_desc = Pexp_match (ident, cases)
               }, _)
           }] -> gen_cases ident loc cases
+        (* Evaluation of a constructor expression *)
+        | PStr [{
+            pstr_desc = Pstr_eval ({
+                pexp_loc = loc;
+                pexp_desc = Pexp_constant (Pconst_string (value, _))
+              }, _)
+          }] -> gen_constructor_expr loc value
         (* Evaluation of a let expression *)
         | PStr [{
             pstr_desc = Pstr_eval ({
                 pexp_loc = loc;
-                pexp_desc = Pexp_let (recflg, bindings, expr)
+                pexp_desc = Pexp_let (Asttypes.Nonrecursive, bindings, expr)
               }, _)
-          }] -> gen_let loc bindings expr recflg
+          }] -> transform_let ~mapper loc expr bindings
+        | PStr [{
+            pstr_desc = Pstr_eval ({
+                pexp_loc = loc;
+                pexp_desc = Pexp_let (Asttypes.Recursive, bindings, expr)
+              }, _)
+          }] -> raise (location_exn ~loc "Recursion not supported")
         (* Unsupported expression *)
         | _ -> raise (location_exn ~loc "Unsupported operator")
       end
