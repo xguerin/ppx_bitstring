@@ -497,18 +497,18 @@ and gen_fields ~loc org_off (dat, off, len) beh fields =
     gen_fields_with_quals ~loc org_off (dat, off, len) (p, l, q) beh tl
   | _ -> location_exn ~loc "Wrong pattern type in bitmatch case"
 
-let gen_case org_off res (dat, off, len) case =
+let gen_case ~mapper org_off res (dat, off, len) case =
   let loc = case.pc_lhs.ppat_loc in
   match case.pc_lhs.ppat_desc with
   | Ppat_constant (Pconst_string (value, _)) ->
-    let beh = [%expr [%e (mkident res)] := Some ([%e case.pc_rhs]); raise Exit]
+    let beh = [%expr [%e (mkident res)] := Some ([%e mapper.Ast_mapper.expr mapper case.pc_rhs]); raise Exit]
     in List.map
       ~f:(fun flds -> parse_match_fields ~loc flds)
       (String.split ~on:';' value)
     |> gen_fields ~loc org_off (dat, off, len) beh
   | _ -> location_exn ~loc "Wrong pattern type in bitmatch case"
 
-let gen_cases ident loc cases =
+let gen_cases ~mapper ident loc cases =
   let open Location in
   let datN = mksym "data" in
   let offNN = mksym "off" and lenNN = mksym "len" in
@@ -516,7 +516,7 @@ let gen_cases ident loc cases =
   let algN = mksym "aligned" and resN = mksym "result" in
   let stmts = List.fold
       ~init:[]
-      ~f:(fun acc case -> acc @ [ gen_case offN resN (datN, offNN, lenNN) case ])
+      ~f:(fun acc case -> acc @ [ gen_case ~mapper offN resN (datN, offNN, lenNN) case ])
       cases
   in
   let rec build_seq = function
@@ -719,7 +719,7 @@ let ppx_bitstring_mapper argv = {
                 pexp_loc = loc;
                 pexp_desc = Pexp_match (ident, cases)
               }, _)
-          }] -> gen_cases ident loc cases
+          }] -> gen_cases ~mapper ident loc cases
         (* Evaluation of a constructor expression *)
         | PStr [{
             pstr_desc = Pstr_eval ({
