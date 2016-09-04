@@ -603,27 +603,39 @@ let gen_constructor loc sym = function
     end
   | _ -> raise (location_exn ~loc "Invalid field format")
 
+let gen_assignment_size_of_field loc = function
+  | (_, None, _) -> [%expr 0]
+  | (f, Some (s), q) -> begin
+      match (evaluate_expr s), Option.bind q (fun q -> q.Qualifiers.value_type) with
+      | Some (v), Some (Type.String) ->
+         if v = (-1) then
+           [%expr (String.length [%e f] * 8)]
+         else if v > 0 && (v mod 8) = 0 then
+           s
+         else
+           raise (location_exn ~loc "length of string must be > 0 and multiple of 8, or the special value -1")
+      | None, Some (Type.String) -> s
+      | Some (v), Some (Type.Bitstring) ->
+         if v = (-1) then
+           [%expr (Bitstring.bitstring_length [%e f])]
+         else if v > 0 then
+           s
+         else
+           raise (location_exn ~loc "length of bitstring must be >= 0 or the special value -1")
+      | None, Some (Type.Bitstring) -> s
+      | Some (v), _ ->
+         if v <= 0 then
+           raise (location_exn ~loc "Negative or null field size in constructor")
+         else s
+      | None, _ -> raise (location_exn ~loc "Invalid field size in constructor")
+    end
+
 let rec gen_assignment_size loc = function
-  | []
-  | [(_, None, _)] -> [%expr 0]
-  | [(_, Some (s), _)] -> begin
-      match (evaluate_expr s) with
-      | Some (v) -> if v <= 0 then
-          raise (location_exn ~loc "Negative or null field size in constructor")
-        else s
-      | None -> s
-    end
-  | (_, None, _) :: tl ->
-    gen_assignment_size loc tl
-  | (_, Some (s), _) :: tl -> begin
-      match (evaluate_expr s) with
-      | Some (v) -> if v <= 0 then
-          raise (location_exn ~loc "Negative or null field size in constructor")
-        else
-          let next = gen_assignment_size loc tl in
-          [%expr [%e s] + ([%e next])]
-      | None -> raise (location_exn ~loc "Invalid field size in constructor")
-    end
+  | [] -> [%expr 0]
+  | field :: tl ->
+     let this = gen_assignment_size_of_field loc field in
+     let next = gen_assignment_size loc tl in
+     [%expr [%e this] + ([%e next])]
 
 let gen_assignment_behavior loc sym fields =
   let size = gen_assignment_size loc fields in
