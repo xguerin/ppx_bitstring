@@ -682,7 +682,6 @@ let gen_constructor_expr loc value =
 *)
 
 let transform_single_let ~mapper loc ast expr =
-  eprintf "[transform_single_let:expr] %s\n" (Pprintast.string_of_expression expr);
   match ast.pvb_pat.ppat_desc, ast.pvb_expr.pexp_desc with
   | Parsetree.Ppat_var (s), Pexp_constant (Pconst_string (value, _)) ->
     let pat = mkpatvar s.txt in
@@ -694,14 +693,12 @@ let transform_single_let ~mapper loc ast expr =
     in
     let constructor_expr = Exp.extension ~loc (extension, PStr [payload]) in
     let expr = [%expr let [%p pat] = [%e constructor_expr] in [%e expr]] in
-    eprintf "[transform_single_let:expr post] '%s'\n" (Pprintast.string_of_expression expr);
     mapper.Ast_mapper.expr mapper expr
   | _ -> raise (location_exn ~loc "Invalid pattern type")
 
 let rec transform_let ~mapper loc expr = function
   | [] -> expr
   | hd :: tl ->
-     eprintf "[transform_let] hd :: tl\n";
      let next = transform_let ~mapper loc expr tl in
      transform_single_let ~mapper loc hd next
 
