@@ -30,7 +30,19 @@ match%bitstring bs with
 | {| _ |} -> (* Do something else *)
 ```
 
-Usage example with the PPX extension for constructing bitstrings:
+Usage example with the PPX extension for constructing bitstrings using the
+`let` syntax:
+
+```ocaml
+let%bitstring my_bitstring = {|
+    1 : 1;
+    a : 2;
+    b : 16 : bigendian;
+    ...
+  |} in (* Do something here *)
+```
+Usage example with the PPX extension for constructing bitstrings using the
+constructor syntax:
 
 ```ocaml
 let my_bitstring =
@@ -39,7 +51,7 @@ let my_bitstring =
     a : 2;
     b : 16 : bigendian;
     ...
-  |} in (* Do something here *)
+  |}] in (* Do something here *)
 ```
 
 The format of the cases being the same as the original `bitstring`, please refer to its [documentation](http://people.redhat.com/~rjones/bitstring/html/Bitstring.html).
