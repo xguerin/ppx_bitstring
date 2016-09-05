@@ -2,15 +2,15 @@ open Bitstring
 open Printf
 
 let buildUDP src dst len chk =
-  let%bitstring udp = {|
+  [%bitstring {|
     src : 16 : bigendian;
     dst : 16 : bigendian;
     len : 16 : bigendian;
     chk : 16 : bigendian
-  |} in udp
+  |}]
 
 let buildIP ihl len proto chk (s0, s1, s2, s3) (d0, d1, d2, d3) pld =
-  let%bitstring ipv4 = {|
+  [%bitstring {|
     4     : 4;
     ihl   : 4;
     0     : 6; (* dscp *)
@@ -25,7 +25,7 @@ let buildIP ihl len proto chk (s0, s1, s2, s3) (d0, d1, d2, d3) pld =
     s0    : 8; s1    : 8; s2    : 8; s3    : 8;
     d0    : 8; d1    : 8; d2    : 8; d3    : 8;
     pld   : (len - ihl * 4) * 8 : bitstring
-  |} in ipv4
+  |}]
 
 let () =
   let udp = buildUDP 0x1000 0x1000 0 0 in
@@ -52,4 +52,3 @@ let () =
       Printf.printf "Decoding passed\n"
   | {| _ |} ->
     Printf.printf "Decoding failed\n"
-
