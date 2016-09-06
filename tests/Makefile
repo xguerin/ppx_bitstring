@@ -1,10 +1,14 @@
-all:
-	ocamlfind opt -package bitstring,core -thread -linkpkg  -ppx ../src/ppx_bitstring.ext gif.ml -o gif
-	ocamlfind opt -package bitstring,core -thread -linkpkg  -ppx ../src/ppx_bitstring.ext constructor.ml -o constructor
-	ocamlfind opt -package bitstring,core -thread -linkpkg  -ppx ../src/ppx_bitstring.ext ext3.ml -o ext3
-	ocamlfind opt -package bitstring,core -thread -linkpkg  -ppx ../src/ppx_bitstring.ext net.ml -o net
-	ocamlfind opt -package bitstring,core -thread -linkpkg  -ppx ../src/ppx_bitstring.ext bitstring_in_bitstring.ml -o bitstring_in_bitstring
-	ocamlfind opt -package bitstring,core -thread -linkpkg  -ppx ../src/ppx_bitstring.ext swap.ml -o swap
+default: all
 
 clean:
-	rm -f *.cm* *.o gif constructor ext3 net bitstring_in_bitstring
+	rm -f *.cm* *.o *Test *.log *.cache
+
+build:
+	ocamlfind opt -package bitstring,oUnit,core -thread -linkpkg -ppx ../src/ppx_bitstring.ext BitstringParserTest.ml -o BitstringParserTest
+	ocamlfind opt -package bitstring,oUnit,core -thread -linkpkg -ppx ../src/ppx_bitstring.ext BitstringConstructorTest.ml -o BitstringConstructorTest
+
+run:
+	./BitstringParserTest
+	./BitstringConstructorTest
+
+all: clean build run
