@@ -575,10 +575,9 @@ let gen_constructor loc sym = function
           | Some (size), Some (_), Some (_) when size = 1 -> begin
               let ex = "Bitstring.construct_bit" in
               let vl = match (evaluate_expr l) with
-                | Some (1) -> Ast_convenience.constr "true" []
-                | Some (0) -> Ast_convenience.constr "false" []
-                | Some (_) | None ->
-                  raise (location_exn ~loc "Invalid value for bit size")
+                | Some (1)        -> Ast_convenience.constr "true" []
+                | Some (0)        -> Ast_convenience.constr "false" []
+                | Some (_) | None -> l
               in Ast_convenience.app (Ast_convenience.evar ex)
                 [ (Ast_convenience.evar sym); vl; (Ast_convenience.int 1); exc ]
             end

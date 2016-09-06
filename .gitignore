@@ -1,3 +1,12 @@
 _build
 ppx_bitstring.native
+ppx_bitstring.ext
 temp
+*.o
+*.cmo
+*.log
+*.cache
+*.cmi
+*.cmx
+*.swp
+*Test

@@ -63,13 +63,31 @@ let swap_test context =
   assert_bool "Bitstring swap failed" (Bitstring.equals three (swap three))
 
 (*
+ * External value test
+ *)
+
+let external_value_test context =
+  let result = "\x00\x02\x00\x00\x00\x01\xC0" in
+  let int16_value = 2 in
+  let int32_value = 1_l in
+  let bool_value = true in
+  let bits = [%bitstring {| int16_value : 16;
+                            int32_value : 32;
+                            1           : 1;
+                            bool_value  : 1;
+                            0           : 6 |}] in
+  let str = Bitstring.string_of_bitstring bits in
+  assert_equal str result
+
+(*
  * Test suite definition
  *)
 
 let suite = "BitstringConstructorTest" >::: [
     "imbricated_bistring_test"  >:: imbricated_bistring_test;
     "constructor_style_test"    >:: constructor_style_test;
-    "swap_test"                 >:: swap_test
+    "swap_test"                 >:: swap_test;
+    "external_value_test"       >:: external_value_test
   ]
 
 let () = run_test_tt_main suite
