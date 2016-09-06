@@ -646,11 +646,11 @@ let gen_assignment_behavior loc sym fields =
     | Some (v) ->
       let vexpr = Ast_convenience.int v in
       [%expr let _res = [%e rep] in
-             if (Bitstring.bitstring_length _res) == [%e vexpr]
+             if (Bitstring.bitstring_length _res) = [%e vexpr]
              then _res else raise Exit]
     | None ->
       [%expr let _res = [%e rep] in
-             if (Bitstring.bitstring_length _res) == [%e size]
+             if (Bitstring.bitstring_length _res) = [%e size]
              then _res else raise Exit]
   in
   let exprs = List.fold_right
