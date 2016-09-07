@@ -131,7 +131,7 @@ let parse_pattern ~loc str =
 (* Exception *)
 
 let location_exn ~loc msg =
-  raise (Location.Error (Location.error ~loc ("Error: " ^ msg)))
+  raise (Location.Error (Location.error ~loc msg))
 
 (* Processing qualifiers *)
 
@@ -209,12 +209,18 @@ let parse_quals ~loc str =
     | hd :: tl -> process_quals ~loc (process_qual ~loc state hd) tl
   in match expr with
   (* single named qualifiers *)
-  | { pexp_desc = Pexp_ident (_) } -> process_qual ~loc Qualifiers.empty expr
+  | { pexp_desc = Pexp_ident (_) } ->
+    process_qual ~loc Qualifiers.empty expr
   (* single functional qualifiers *)
-  | { pexp_desc = Pexp_apply (_, _) } -> process_qual ~loc Qualifiers.empty expr
+  | { pexp_desc = Pexp_apply (_, _) } ->
+    process_qual ~loc Qualifiers.empty expr
   (* multiple qualifiers *)
-  | { pexp_desc = Pexp_tuple (e) } -> process_quals ~loc Qualifiers.empty e
-  | _ -> location_exn ~loc ("Format error: " ^ str)
+  | { pexp_desc = Pexp_tuple (e) } ->
+    process_quals ~loc Qualifiers.empty e
+  (* Unrecognized expression *)
+  | expr ->
+    let expr_str = Pprintast.string_of_expression expr in
+    location_exn ~loc ("Invalid qualifiers list: " ^ expr_str)
 
 (* Processing expression *)
 
@@ -292,7 +298,11 @@ let parse_match_fields ~loc str =
   | [ pat; len; quals ] ->
     let q = Some (Qualifiers.set_defaults (parse_quals ~loc quals)) in
     (parse_pattern ~loc pat, Some (parse_expr ~loc len), q)
-  | _ -> location_exn ~loc ("Format error: \"" ^ str ^ "\"")
+  | [ stmt ] ->
+    let pat_str = StdLabels.Bytes.to_string stmt in
+    location_exn ~loc ("Invalid pattern statement: " ^ pat_str)
+  | _ ->
+    location_exn ~loc "Unsupported pattern statement"
 
 let parse_const_fields ~loc str =
   let e = List.fold_right
@@ -306,7 +316,11 @@ let parse_const_fields ~loc str =
   | [ vl; len; quals ] ->
     let q = Some (Qualifiers.set_defaults (parse_quals ~loc quals)) in
     (parse_expr ~loc vl, Some (parse_expr ~loc len), q)
-  | _ -> location_exn ~loc ("Format error: \"" ^ str ^ "\"")
+  | [ stmt ] ->
+    let pat_str = StdLabels.Bytes.to_string stmt in
+    location_exn ~loc ("Invalid pattern statement: " ^ pat_str)
+  | _ ->
+    location_exn ~loc "Unsupported pattern statement"
 
 (* Match generators *)
 
@@ -351,8 +365,8 @@ let gen_extractor (dat, off, len) (l, q) loc =
     begin match (evaluate_expr l), q.sign, q.endian with
       (* 1-bit type *)
       | Some (size), Some (_), Some (_) when size = 1 ->
-        [%expr if (Bitstring.extract_bit [%e (mkident dat)] [%e (mkident off)]
-                     [%e (mkident len)] [%e l]) then true else false]
+        [%expr Bitstring.extract_bit
+            [%e (mkident dat)] [%e (mkident off)] [%e (mkident len)] [%e l]]
       (* 8-bit type *)
       | Some (size), Some (sign), Some (_) when size >= 2 && size <= 8 ->
         let ex = sprintf "Bitstring.extract_char_%s" (Sign.to_string sign) in
