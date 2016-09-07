@@ -274,12 +274,6 @@ let rec evaluate_expr = function
       | Pconst_integer(i, _) -> Some (int_of_string i)
       | _ -> None
     end
-  | { pexp_desc = Pexp_construct ({ txt; _ } , _) } ->
-    begin match txt with
-      | Lident "true"   -> Some (1)
-      | Lident "false"  -> Some (0)
-      | _               -> None
-    end
   | _ -> None
 
 (* Parsing fields *)
