@@ -228,12 +228,12 @@ let process_qual state qual =
       | None -> { state with endian = Some (Endian.Referred sub) }
     end
   | [%expr bind [%e? sub]] ->
-    begin match state.check with
+    begin match state.bind with
       | Some v -> location_exn ~loc "Bind expression redefined"
       | None -> { state with bind = Some sub }
     end
   | [%expr check [%e? sub]] ->
-    begin match state.bind with
+    begin match state.check with
       | Some v -> location_exn ~loc "Check expression redefined"
       | None -> { state with check = Some sub }
     end
