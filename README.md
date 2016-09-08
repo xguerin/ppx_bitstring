@@ -4,15 +4,14 @@ PPX plugin for the OCAML OPAM bitstring package.
 
 ## Overview
 
-This repository is a development playground. It aims at eventually being a drop-in replacement of the `ocamlp4` extension.
+The PPX extension is called `ppx_bitstring.ext`. It aims at eventually being a drop-in replacement of the bitstring `ocamlp4` extension.
 
-## Usage
+## Installation
 
-The PPX extension is called `ppx_bitstring.ext`. It should be used as follows:
+`ppx_bitstring` is available on `opam`:
 
 ```bash
-$ opam pin add -k git ppx_bitstring https://github.com/xguerin/ppx_bitstring
-$ ocamlfind ocamlopt -linkpkg -thread -package core,bitstring,ppx_bitstring.ext main.ml -o main.native
+opam install ppx_bitstring
 ```
 
 ## Syntax
@@ -31,8 +30,7 @@ match%bitstring bs with
 | {| _ |} -> (* Do something else *)
 ```
 
-Usage example with the PPX extension for constructing bitstrings using the
-`let` syntax:
+Usage example with the PPX extension for constructing bitstrings using the `let` syntax:
 
 ```ocaml
 let%bitstring my_bitstring = {|
@@ -42,8 +40,7 @@ let%bitstring my_bitstring = {|
   ; ...
   |} in (* Do something here *)
 ```
-Usage example with the PPX extension for constructing bitstrings using the
-constructor syntax:
+Usage example with the PPX extension for constructing bitstrings using the constructor syntax:
 
 ```ocaml
 let my_bitstring =
@@ -59,8 +56,7 @@ The format of the cases being the same as the original `bitstring`, please refer
 
 ## Error reporting
 
-This extension point supports error reporting. However, the algorithm is rather
-crude and the best results are obtained by following these rules :
+This extension point supports error reporting. However, the algorithm is rather crude and the best results are obtained by following these rules :
 
 1. Statements should not be split over multiple lines. However, multiple statements per lines are supported.
 2. Statement separators should be placed *before*, and not *after* the statement.
