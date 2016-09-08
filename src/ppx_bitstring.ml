@@ -62,6 +62,7 @@ module Qualifiers = struct
     endian          : Endian.t option;
     check           : Parsetree.expression option;
     bind            : Parsetree.expression option;
+    map             : Parsetree.expression option;
     save_offset_to  : Parsetree.expression option;
   }
   let empty = {
@@ -70,6 +71,7 @@ module Qualifiers = struct
     endian          = None;
     check           = None;
     bind            = None;
+    map             = None;
     save_offset_to  = None;
   }
   let default = {
@@ -78,6 +80,7 @@ module Qualifiers = struct
     endian          = Some Endian.Big;
     check           = None;
     bind            = None;
+    map             = None;
     save_offset_to  = None;
   }
   let set_defaults v =
@@ -178,6 +181,11 @@ let location_exn ~loc msg =
 
 (* Processing qualifiers *)
 
+let check_map_functor sub =
+  match sub with
+  | [%expr (fun [%p? _] -> [%e? _])]  -> Some (sub)
+  | _                                 -> None
+
 let process_qual state qual =
   let open Qualifiers in
   let loc = qual.pexp_loc in
@@ -228,9 +236,22 @@ let process_qual state qual =
       | None -> { state with endian = Some (Endian.Referred sub) }
     end
   | [%expr bind [%e? sub]] ->
-    begin match state.bind with
-      | Some v -> location_exn ~loc "Bind expression redefined"
-      | None -> { state with bind = Some sub }
+    begin match state.bind, state.map with
+      | Some b, None   -> location_exn ~loc "Bind expression redefined"
+      | None,   Some m -> location_exn ~loc "Map expression already defined"
+      | Some b, Some m -> location_exn ~loc "Inconsistent internal state"
+      | None,   None   -> { state with bind = Some sub }
+    end
+  | [%expr map [%e? sub]] ->
+    begin match state.bind, state.map with
+      | Some b, None   -> location_exn ~loc "Bind expression already defined"
+      | None,   Some m -> location_exn ~loc "Map expression redefined"
+      | Some b, Some m -> location_exn ~loc "Inconsistent internal state"
+      | None,   None   -> begin
+          match check_map_functor sub with
+          | Some sub  -> { state with map = Some sub }
+          | None      -> location_exn ~loc "Invalid map functor"
+        end
     end
   | [%expr check [%e? sub]] ->
     begin match state.check with
@@ -347,15 +368,26 @@ let parse_match_fields str =
     location_exn ~loc:str.loc "Invalid number of fields in statement"
 
 let parse_const_fields str =
+  let open Qualifiers in
   String.split ~on:':' str.txt
   |> split_loc ~loc:str.loc
   |> function
   | [ vl; len ] ->
-    let q = Some Qualifiers.default in
-    (parse_expr vl, Some (parse_expr len), q)
+    (parse_expr vl, Some (parse_expr len), Some Qualifiers.default)
   | [ vl; len; quals ] ->
-    let q = Some (Qualifiers.set_defaults (parse_quals quals)) in
-    (parse_expr vl, Some (parse_expr len), q)
+    let q = Qualifiers.set_defaults (parse_quals quals) in
+    begin match q.bind, q.map, q.check, q.save_offset_to with
+      | Some _, _, _, _ ->
+        location_exn ~loc:str.loc "Bind meaningless in constructor"
+      | _, Some _, _, _ ->
+          location_exn ~loc:str.loc "Map meaningless in constructor"
+      | _, _, Some _, _ ->
+          location_exn ~loc:str.loc "Check meaningless in constructor"
+      | _, _, _, Some _ ->
+        location_exn ~loc:str.loc "Saving offset  meaningless in constructor"
+      | None, None, None, None ->
+        (parse_expr vl, Some (parse_expr len), Some (q))
+    end
   | [ stmt ] ->
     let pat_str = StdLabels.Bytes.to_string stmt.txt in
     location_exn ~loc:stmt.loc ("Invalid statement: '" ^ pat_str ^ "'")
@@ -448,9 +480,10 @@ let gen_extractor (dat, off, len) (l, q) loc =
 
 let gen_value (dat, off, len) (l, q) loc =
   let open Qualifiers in
-  match q.bind with
-  | Some b -> b
-  | None -> gen_extractor (dat, off, len) (l, q) loc
+  match q.bind, q.map  with
+  | Some b, None    -> b
+  | None,   Some m  -> [%expr [%e m] [%e (gen_extractor (dat, off, len) (l, q) loc)]]
+  | _,      _       -> gen_extractor (dat, off, len) (l, q) loc
 
 let rec gen_next org_off ~loc (dat, off, len) (p, l, q) beh fields =
   match (evaluate_expr l) with

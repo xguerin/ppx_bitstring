@@ -9,4 +9,5 @@ temp
 *.cmi
 *.cmx
 *.swp
+*.out
 *Test
