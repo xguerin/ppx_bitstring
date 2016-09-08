@@ -122,11 +122,54 @@ let rec process_loc ~loc expr =
     in { expr with pexp_desc = Pexp_apply(ident, fld); pexp_loc = loc }
   | _ -> { expr with pexp_loc = loc }
 
-let parse_expr ~loc str =
-  process_loc ~loc (Parse.expression (Lexing.from_string str))
+let parse_expr expr =
+  process_loc ~loc:expr.loc (Parse.expression (Lexing.from_string expr.txt))
 
-let parse_pattern ~loc str =
-  { (Parse.pattern (Lexing.from_string str)) with ppat_loc = loc }
+let parse_pattern pat =
+  { (Parse.pattern (Lexing.from_string pat.txt)) with ppat_loc = pat.loc }
+
+(* Location parser and splitter *)
+
+let find_loc_boundaries ~loc last rem =
+  let open Location in
+  let { loc_start; loc_end; loc_ghost } = loc in
+  let xtr_lines = List.length rem in
+  let xtr_char = List.fold_left ~init:xtr_lines ~f:(+) rem in
+  let ne = { loc_start with
+             pos_lnum = loc_start.pos_lnum + xtr_lines;
+             pos_bol  = loc_start.pos_bol + xtr_char;
+             pos_cnum = loc_start.pos_cnum + xtr_char + last
+           }
+  and ns = if xtr_lines = 0
+    then { loc_start with
+           pos_cnum = loc_start.pos_cnum + xtr_char + last + 1
+         }
+    else { loc_start with
+           pos_lnum = loc_start.pos_lnum + xtr_lines;
+           pos_bol  = loc_start.pos_bol + xtr_char;
+           pos_cnum = loc_start.pos_cnum + xtr_char
+         } in
+  let tloc = { loc_start; loc_end = ne; loc_ghost } in
+  let nloc = { loc_start = ns; loc_end; loc_ghost } in
+  (tloc, nloc)
+
+let rec split_loc_rec ~loc = function
+  | [] -> []
+  | hd :: tl ->
+    let line_list = String.split ~on:'\n' hd
+                    |> List.rev
+                    |> List.map ~f:String.length in
+    begin
+      match line_list with
+      | [] -> []
+      | last::rem ->
+        let (tloc, nloc) = find_loc_boundaries ~loc last rem in
+        [ tloc ] @ (split_loc_rec ~loc:nloc tl)
+    end
+
+let split_loc ~loc lst =
+  split_loc_rec ~loc lst
+  |> List.map2_exn lst ~f:(fun e loc -> Location.mkloc (StdLabels.Bytes.trim e) loc)
 
 (* Exception *)
 
@@ -135,92 +178,93 @@ let location_exn ~loc msg =
 
 (* Processing qualifiers *)
 
-let process_qual ~loc state q =
+let process_qual state qual =
   let open Qualifiers in
-  match q with
+  let loc = qual.pexp_loc in
+  match qual with
   | [%expr int] ->
     begin match state.value_type with
-      | Some v -> location_exn ~loc "Value type can only be defined once"
+      | Some v -> location_exn ~loc "Value type redefined"
       | None -> { state with value_type = Some Type.Int }
     end
   | [%expr string] ->
     begin match state.value_type with
-      | Some v -> location_exn ~loc "Value type can only be defined once"
+      | Some v -> location_exn ~loc "Value type redefined"
       | None -> { state with value_type = Some Type.String }
     end
   | [%expr bitstring] ->
     begin match state.value_type with
-      | Some v -> location_exn ~loc "Value type can only be defined once"
+      | Some v -> location_exn ~loc "Value type redefined"
       | None -> { state with value_type = Some Type.Bitstring }
     end
   | [%expr signed] ->
     begin match state.sign with
-      | Some v -> location_exn ~loc "Signedness can only be defined once"
+      | Some v -> location_exn ~loc "Signedness redefined"
       | None -> { state with sign = Some Sign.Signed }
     end
   | [%expr unsigned] ->
     begin match state.sign with
-      | Some v -> location_exn ~loc "Signedness can only be defined once"
+      | Some v -> location_exn ~loc "Signedness redefined"
       | None -> { state with sign = Some Sign.Unsigned }
     end
   | [%expr littleendian] ->
     begin match state.endian with
-      | Some v -> location_exn ~loc "Endianness can only be defined once"
+      | Some v -> location_exn ~loc "Endianness redefined"
       | None -> { state with endian = Some Endian.Little }
     end
   | [%expr bigendian] ->
     begin match state.endian with
-      | Some v -> location_exn ~loc "Endianness can only be defined once"
+      | Some v -> location_exn ~loc "Endianness redefined"
       | None -> { state with endian = Some Endian.Big }
     end
   | [%expr nativeendian] ->
     begin match state.endian with
-      | Some v -> location_exn ~loc "Endianness can only be defined once"
+      | Some v -> location_exn ~loc "Endianness redefined"
       | None -> { state with endian = Some Endian.Native }
     end
   | [%expr endian [%e? sub]] ->
     begin match state.endian with
-      | Some v -> location_exn ~loc "Endianness can only be defined once"
+      | Some v -> location_exn ~loc "Endianness redefined"
       | None -> { state with endian = Some (Endian.Referred sub) }
     end
   | [%expr bind [%e? sub]] ->
     begin match state.check with
-      | Some v -> location_exn ~loc "Bind expression can only be defined once"
+      | Some v -> location_exn ~loc "Bind expression redefined"
       | None -> { state with bind = Some sub }
     end
   | [%expr check [%e? sub]] ->
     begin match state.bind with
-      | Some v -> location_exn ~loc "Check expression can only be defined once"
+      | Some v -> location_exn ~loc "Check expression redefined"
       | None -> { state with check = Some sub }
     end
   | [%expr save_offset_to [%e? sub]] ->
     begin match state.save_offset_to with
-      | Some v -> location_exn ~loc "Offset expression can only be defined once"
+      | Some v -> location_exn ~loc "Offset expression redefined"
       | None -> { state with save_offset_to = Some sub }
     end
   | _ ->
-    let sexp = Pprintast.string_of_expression q in
+    let sexp = Pprintast.string_of_expression qual in
     raise (location_exn ~loc ("Invalid qualifier: " ^ sexp))
 
-let parse_quals ~loc str =
-  let expr = parse_expr ~loc str in
-  let rec process_quals ~loc state = function
+let parse_quals quals =
+  let expr = parse_expr quals in
+  let rec process_quals state = function
     | [] -> state
-    | hd :: tl -> process_quals ~loc (process_qual ~loc state hd) tl
+    | hd :: tl -> process_quals (process_qual state hd) tl
   in match expr with
   (* single named qualifiers *)
   | { pexp_desc = Pexp_ident (_) } ->
-    process_qual ~loc Qualifiers.empty expr
+    process_qual Qualifiers.empty expr
   (* single functional qualifiers *)
   | { pexp_desc = Pexp_apply (_, _) } ->
-    process_qual ~loc Qualifiers.empty expr
+    process_qual Qualifiers.empty expr
   (* multiple qualifiers *)
   | { pexp_desc = Pexp_tuple (e) } ->
-    process_quals ~loc Qualifiers.empty e
+    process_quals Qualifiers.empty e
   (* Unrecognized expression *)
   | expr ->
     let expr_str = Pprintast.string_of_expression expr in
-    location_exn ~loc ("Invalid qualifiers list: " ^ expr_str)
+    location_exn ~loc:expr.pexp_loc ("Invalid qualifiers list: " ^ expr_str)
 
 (* Processing expression *)
 
@@ -284,43 +328,39 @@ let rec evaluate_expr = function
 
 (* Parsing fields *)
 
-let parse_match_fields ~loc str =
-  let e = List.fold_right
-      ~init:[]
-      ~f:(fun e acc -> [StdLabels.Bytes.trim e] @ acc)
-      (String.split ~on:':' str)
-  in match e with
-  | [ "_" as pat ] ->
-    (parse_pattern ~loc pat, None, None)
+let parse_match_fields str =
+  String.split ~on:':' str.txt
+  |> split_loc ~loc:str.loc
+  |> function
+  | [ { txt = "_" ; loc } as pat ] ->
+    (parse_pattern pat, None, None)
   | [ pat; len ] ->
     let q = Some Qualifiers.default in
-    (parse_pattern ~loc pat, Some (parse_expr ~loc len), q)
+    (parse_pattern pat, Some (parse_expr len), q)
   | [ pat; len; quals ] ->
-    let q = Some (Qualifiers.set_defaults (parse_quals ~loc quals)) in
-    (parse_pattern ~loc pat, Some (parse_expr ~loc len), q)
+    let q = Some (Qualifiers.set_defaults (parse_quals quals)) in
+    (parse_pattern pat, Some (parse_expr len), q)
   | [ stmt ] ->
-    let pat_str = StdLabels.Bytes.to_string stmt in
-    location_exn ~loc ("Invalid pattern statement: " ^ pat_str)
+    let pat_str = StdLabels.Bytes.to_string stmt.txt in
+    location_exn ~loc:stmt.loc ("Invalid statement: '" ^ pat_str ^ "'")
   | _ ->
-    location_exn ~loc "Unsupported pattern statement"
+    location_exn ~loc:str.loc "Invalid number of fields in statement"
 
-let parse_const_fields ~loc str =
-  let e = List.fold_right
-      ~init:[]
-      ~f:(fun e acc -> [StdLabels.Bytes.trim e] @ acc)
-      (String.split ~on:':' str)
-  in match e with
+let parse_const_fields str =
+  String.split ~on:':' str.txt
+  |> split_loc ~loc:str.loc
+  |> function
   | [ vl; len ] ->
     let q = Some Qualifiers.default in
-    (parse_expr ~loc vl, Some (parse_expr ~loc len), q)
+    (parse_expr vl, Some (parse_expr len), q)
   | [ vl; len; quals ] ->
-    let q = Some (Qualifiers.set_defaults (parse_quals ~loc quals)) in
-    (parse_expr ~loc vl, Some (parse_expr ~loc len), q)
+    let q = Some (Qualifiers.set_defaults (parse_quals quals)) in
+    (parse_expr vl, Some (parse_expr len), q)
   | [ stmt ] ->
-    let pat_str = StdLabels.Bytes.to_string stmt in
-    location_exn ~loc ("Invalid pattern statement: " ^ pat_str)
+    let pat_str = StdLabels.Bytes.to_string stmt.txt in
+    location_exn ~loc:stmt.loc ("Invalid statement: '" ^ pat_str ^ "'")
   | _ ->
-    location_exn ~loc "Unsupported pattern statement"
+    location_exn ~loc:str.loc "Invalid number of fields in statement"
 
 (* Match generators *)
 
@@ -371,21 +411,21 @@ let gen_extractor (dat, off, len) (l, q) loc =
       | Some (size), Some (sign), Some (_) when size >= 2 && size <= 8 ->
         let ex = sprintf "Bitstring.extract_char_%s" (Sign.to_string sign) in
         let op = sprintf "%s %s %s %s %d" ex dat off len size in
-        parse_expr ~loc op
+        parse_expr (Location.mkloc op loc)
       (* 16|32|64-bit type *)
       | Some (size), Some (sign), Some (Endian.Referred r) ->
         let ss = Sign.to_string sign and it = get_inttype ~loc size in
         let ex = sprintf "Bitstring.extract_%s_ee_%s" it ss in
         let ee = Pprintast.string_of_expression r in
         let op = sprintf "%s (%s) %s %s %s %d" ex ee dat off len size in
-        parse_expr ~loc op
+        parse_expr (Location.mkloc op loc)
       | Some (size), Some (sign), Some (endian) ->
         let tp = get_inttype ~loc size in
         let en = Endian.to_string endian in
         let sn = Sign.to_string sign in
         let ex = sprintf "Bitstring.extract_%s_%s_%s" tp en sn in
         let op = sprintf "%s %s %s %s %d" ex dat off len size in
-        parse_expr ~loc op
+        parse_expr (Location.mkloc op loc)
       (* Variable size *)
       | None, Some (sign), Some (Endian.Referred r) ->
         let ss = Sign.to_string sign in
@@ -393,13 +433,13 @@ let gen_extractor (dat, off, len) (l, q) loc =
         let ee = Pprintast.string_of_expression r in
         let ln = Pprintast.string_of_expression l in
         let op = sprintf "%s (%s) %s %s %s (%s)" ex ee dat off len ln in
-        parse_expr ~loc op
+        parse_expr (Location.mkloc op loc)
       | None, Some (sign), Some (endian) ->
         let es = Endian.to_string endian and ss = Sign.to_string sign in
         let ex = sprintf "Bitstring.extract_int64_%s_%s" es ss in
         let ln = Pprintast.string_of_expression l in
         let op = sprintf "%s %s %s %s (%s)" ex dat off len ln in
-        parse_expr ~loc op
+        parse_expr (Location.mkloc op loc)
       (* Invalid type *)
       | _, _, _ ->
         raise (location_exn ~loc "Invalid type")
@@ -515,12 +555,14 @@ let gen_case ~mapper org_off res (dat, off, len) case =
   let loc = case.pc_lhs.ppat_loc in
   match case.pc_lhs.ppat_desc with
   | Ppat_constant (Pconst_string (value, _)) ->
-    let beh = [%expr [%e (mkident res)] := Some ([%e mapper.Ast_mapper.expr mapper case.pc_rhs]); raise Exit]
-    in List.map
-      ~f:(fun flds -> parse_match_fields ~loc flds)
-      (String.split ~on:';' value)
+    let rhs = mapper.Ast_mapper.expr mapper case.pc_rhs in
+    let beh = [%expr [%e (mkident res)] := Some ([%e rhs]); raise Exit] in
+    String.split ~on:';' value
+    |> split_loc ~loc
+    |> List.map ~f:(fun e -> parse_match_fields e)
     |> gen_fields ~loc org_off (dat, off, len) beh
-  | _ -> location_exn ~loc "Wrong pattern type in bitmatch case"
+  | _ ->
+    location_exn ~loc "Wrong pattern type"
 
 let gen_cases ~mapper ident loc cases =
   let open Location in
@@ -677,9 +719,9 @@ let gen_assignment_behavior loc sym fields =
   [%expr let [%p res] = [%e ini] in [%e seq]]
 
 let parse_assignment_behavior loc sym value =
-  List.map
-    ~f:(fun flds -> parse_const_fields ~loc flds)
-    (String.split ~on:';' value)
+  (String.split ~on:';' value)
+  |> split_loc ~loc
+  |> List.map ~f:(fun flds -> parse_const_fields flds)
   |> gen_assignment_behavior loc sym
 
 let gen_constructor_expr loc value =

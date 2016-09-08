@@ -12,10 +12,10 @@ let imbricated_bistring_test context =
   let data    = 10 in
   let header  = [%bitstring {| version : 8 |}] in
   let bits    = [%bitstring
-    {|  magic  : -1 : string ;
-        header : -1 : bitstring ;
-        data   :  8
-    |}] in
+    {| magic  : -1 : string
+     ; header : -1 : bitstring
+     ; data   :  8
+     |}] in
   let dump = Bitstring.string_of_bitstring bits in
   assert_equal result dump
 
@@ -24,24 +24,26 @@ let imbricated_bistring_test context =
  *)
 
 let constructor_style_test context =
-  let%bitstring bits1 = {|  "GIF87a"  : 6*8 : string;
-                            2145      : 16  : littleendian;
-                            2145      : 16  : littleendian;
-                            true      : 1;
-                            7         : 3;
-                            false     : 1;
-                            7         : 3;
-                            0         : 8;
-                            0         : 8 |} in
-  let bits2 = [%bitstring {|  "GIF87a"  : 6*8 : string;
-                              2145      : 16  : littleendian;
-                              2145      : 16  : littleendian;
-                              true      : 1;
-                              7         : 3;
-                              false     : 1;
-                              7         : 3;
-                              0         : 8;
-                              0         : 8 |}] in
+  let%bitstring bits1 = {| "GIF87a" : 6*8 : string
+                         ; 2145     : 16  : littleendian
+                         ; 2145     : 16  : littleendian
+                         ; true     : 1
+                         ; 7        : 3
+                         ; false    : 1
+                         ; 7        : 3
+                         ; 0        : 8
+                         ; 0        : 8
+                         |} in
+  let bits2 = [%bitstring {| "GIF87a" : 6*8 : string
+                           ; 2145     : 16  : littleendian
+                           ; 2145     : 16  : littleendian
+                           ; true     : 1
+                           ; 7        : 3
+                           ; false    : 1
+                           ; 7        : 3
+                           ; 0        : 8
+                           ; 0        : 8
+                           |}] in
   assert_bool "Bistrings are not equal" (Bitstring.equals bits1 bits2)
 
 (*
@@ -71,11 +73,12 @@ let external_value_test context =
   let int16_value = 2 in
   let int32_value = 1_l in
   let bool_value = true in
-  let bits = [%bitstring {| int16_value : 16;
-                            int32_value : 32;
-                            1           : 1;
-                            bool_value  : 1;
-                            0           : 6 |}] in
+  let bits = [%bitstring {| int16_value : 16
+                          ; int32_value : 32
+                          ; 1           : 1
+                          ; bool_value  : 1
+                          ; 0           : 6
+                          |}] in
   let str = Bitstring.string_of_bitstring bits in
   assert_equal str result
 

@@ -19,14 +19,15 @@ $ ocamlfind ocamlopt -linkpkg -thread -package core,bitstring,ppx_bitstring.ext 
 
 Usage example with the `match` PPX extension:
 
+
 ```ocaml
 match%bitstring bs with
 | {|
-    1 : 1;
-    a : 2;
-    b : 16 : bigendian;
-    ...
-  |} -> (* Do something *)
+   ; 1 : 1
+   ; a : 2
+   ; b : 16 : bigendian
+   ; ...
+   |} -> (* Do something *)
 | {| _ |} -> (* Do something else *)
 ```
 
@@ -35,10 +36,10 @@ Usage example with the PPX extension for constructing bitstrings using the
 
 ```ocaml
 let%bitstring my_bitstring = {|
-    1 : 1;
-    a : 2;
-    b : 16 : bigendian;
-    ...
+  ; 1 : 1
+  ; a : 2
+  ; b : 16 : bigendian
+  ; ...
   |} in (* Do something here *)
 ```
 Usage example with the PPX extension for constructing bitstrings using the
@@ -47,14 +48,22 @@ constructor syntax:
 ```ocaml
 let my_bitstring =
   [%bitstring {|
-    1 : 1;
-    a : 2;
-    b : 16 : bigendian;
-    ...
+  ; 1 : 1
+  ; a : 2
+  ; b : 16 : bigendian
+  ; ...
   |}] in (* Do something here *)
 ```
 
 The format of the cases being the same as the original `bitstring`, please refer to its [documentation](http://people.redhat.com/~rjones/bitstring/html/Bitstring.html).
+
+## Error reporting
+
+This extension point supports error reporting. However, the algorithm is rather
+crude and the best results are obtained by following these rules :
+
+1. Statements should not be split over multiple lines. However, multiple statements per lines are supported.
+2. Statement separators should be placed *before*, and not *after* the statement.
 
 ## Contribute
 
