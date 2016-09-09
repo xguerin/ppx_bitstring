@@ -55,7 +55,7 @@ The pattern syntax is the same as the one of the [original extension](http://peo
 
 ## Additional features
 
-This extension also supports a `map` qualifier which applies a functor to a parsed value and stores the result in the field name:
+This extension also supports a `map` qualifier which applies a lambda to a parsed value and stores the result in the field name:
 
 ```ocaml
 {| field : size : map (fun v -> do_something_with v) }|
