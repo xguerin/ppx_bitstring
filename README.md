@@ -18,7 +18,6 @@ opam install ppx_bitstring
 
 Usage example with the `match` PPX extension:
 
-
 ```ocaml
 match%bitstring bs with
 | {|
@@ -52,7 +51,23 @@ let my_bitstring =
   |}] in (* Do something here *)
 ```
 
-The format of the cases being the same as the original `bitstring`, please refer to its [documentation](http://people.redhat.com/~rjones/bitstring/html/Bitstring.html).
+The pattern syntax is the same as the one of the [original extension](http://people.redhat.com/~rjones/bitstring/html/Bitstring.html).
+
+## Additional features
+
+This extension also supports a `map` qualifier which applies a functor to a parsed value and stores the result in the field name:
+
+```ocaml
+{| field : size : map (fun v -> do_something_with v) }|
+```
+
+Which is equivalent to:
+
+```ocaml
+let field = (fun v -> do_something_with v) temporary_parsed_field
+```
+
+The `map` and `bind` qualifiers are mutually exclusive.
 
 ## Error reporting
 
