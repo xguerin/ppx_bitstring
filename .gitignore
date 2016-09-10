@@ -11,7 +11,13 @@ temp
 *.cmx
 *.swp
 *.out
+*.mllib
+*.mldylib
 *Test
 configure
 setup.data
 setup.ml
+Makefile
+_tags
+myocamlbuild.ml
+src/META
