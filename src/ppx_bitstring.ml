@@ -670,21 +670,20 @@ and gen_fields ~loc org_off (dat, off, len) beh fields =
     gen_fields_with_quals ~loc org_off (dat, off, len) (p, l, q) beh tl
   | _ -> location_exn ~loc "Wrong pattern type in bitmatch case"
 
-let gen_case ~mapper org_off res (dat, off, len) case =
+let gen_case org_off res (dat, off, len) case =
   let loc = case.pc_lhs.ppat_loc in
   match case.pc_lhs.ppat_desc with
   | Ppat_constant (Pconst_string (value, _)) ->
-    let rhs = mapper.Ast_mapper.expr mapper case.pc_rhs in
     let eres = mkident ~loc res in
-    let beh = [%expr [%e eres] := Some ([%e rhs]); raise Exit][@metaloc loc]
+    let beh = [%expr [%e eres] := Some ([%e case.pc_rhs]); raise Exit][@metaloc loc]
     in String.split ~on:';' value
     |> split_loc ~loc
-    |> List.map ~f:(fun e -> parse_match_fields e)
+    |> List.map ~f:parse_match_fields
     |> gen_fields ~loc org_off (dat, off, len) beh
   | _ ->
     location_exn ~loc "Wrong pattern type"
 
-let gen_cases ~mapper ident loc cases =
+let gen_cases ident loc cases =
   let open Location in
   let datN = mksym "data" in
   let offNN = mksym "off" and lenNN = mksym "len" in
@@ -692,7 +691,7 @@ let gen_cases ~mapper ident loc cases =
   let algN = mksym "aligned" and resN = mksym "result" in
   let stmts = List.fold
       ~init:[]
-      ~f:(fun acc case -> acc @ [ gen_case ~mapper offN resN (datN, offNN, lenNN) case ])
+      ~f:(fun acc case -> acc @ [ gen_case offN resN (datN, offNN, lenNN) case ])
       cases
   in
   let rec build_seq = function
@@ -867,71 +866,49 @@ let gen_constructor_expr loc value =
   let beh = parse_assignment_behavior loc sym value in
   [%expr let [%p pat] = fun () -> [%e beh] in [%e fnc]]
 
-(* transform `let%bitstring foo = {| .. |} in`
-   into      `let foo = [%bitstring {| .. |}] in`
-*)
-
-let transform_single_let ~mapper loc ast expr =
+let transform_single_let ~loc ast expr =
   match ast.pvb_pat.ppat_desc, ast.pvb_expr.pexp_desc with
   | Parsetree.Ppat_var (s), Pexp_constant (Pconst_string (value, _)) ->
     let pat = mkpatvar ~loc s.txt in
-    let extension = {Asttypes.txt = "bitstring"; loc} in
-    let payload =
-      Const.string value
-      |> Exp.constant ~loc
-      |> Str.eval ~loc
-    in
-    let constructor_expr = Exp.extension ~loc (extension, PStr [payload]) in
+    let constructor_expr = gen_constructor_expr loc value in
     let expr = [%expr let [%p pat] = [%e constructor_expr] in [%e expr]] in
-    mapper.Ast_mapper.expr mapper expr
+    expr
   | _ -> raise (location_exn ~loc "Invalid pattern type")
-
-let rec transform_let ~mapper loc expr = function
-  | [] -> expr
-  | hd :: tl ->
-     let next = transform_let ~mapper loc expr tl in
-     transform_single_let ~mapper loc hd next
+;;
 
 (* Mapper *)
 
-let ppx_bitstring_mapper argv = {
-  default_mapper with expr = fun mapper expr ->
-    match expr with
-    (* Is this an extension node? *)
-    | { pexp_desc = Pexp_extension ({ txt = "bitstring"; loc }, pstr) } -> begin
-        match pstr with
-        (* Evaluation of a match expression *)
-        | PStr [{
-            pstr_desc = Pstr_eval ({
-                pexp_loc = loc;
-                pexp_desc = Pexp_match (ident, cases)
-              }, _)
-          }] -> gen_cases ~mapper ident loc cases
-        (* Evaluation of a constructor expression *)
-        | PStr [{
-            pstr_desc = Pstr_eval ({
-                pexp_loc = loc;
-                pexp_desc = Pexp_constant (Pconst_string (value, _))
-              }, _)
-          }] -> gen_constructor_expr loc value
-        (* Evaluation of a let expression *)
-        | PStr [{
-            pstr_desc = Pstr_eval ({
-                pexp_loc = loc;
-                pexp_desc = Pexp_let (Asttypes.Nonrecursive, bindings, expr)
-              }, _)
-          }] -> transform_let ~mapper loc expr bindings
-        | PStr [{
-            pstr_desc = Pstr_eval ({
-                pexp_loc = loc;
-                pexp_desc = Pexp_let (Asttypes.Recursive, bindings, expr)
-              }, _)
-          }] -> raise (location_exn ~loc "Recursion not supported")
-        (* Unsupported expression *)
-        | _ -> raise (location_exn ~loc "Unsupported operator")
-      end
-    (* Delegate to the default mapper. *)
-    | x -> default_mapper.expr mapper x;
-}
+open Ppx_core.Std
 
-let () = register "ppx_bitstring" ppx_bitstring_mapper
+let extension =
+  Extension.declare
+    "bitstring"
+    Extension.Context.expression
+    Ast_pattern.(single_expr_payload __)
+    (fun ~loc:_ ~path:_ expr ->
+      let loc = expr.pexp_loc in
+      let expansion =
+        match expr.pexp_desc with
+        | Pexp_constant (Pconst_string (value, (_ : string option))) ->
+           gen_constructor_expr loc value
+        | Pexp_let (Nonrecursive, bindings, expr) ->
+           List.fold_right bindings ~init:expr ~f:(fun binding expr ->
+               transform_single_let ~loc binding expr)
+        | Pexp_match (ident, cases) ->
+           gen_cases ident loc cases
+        | _ ->
+           location_exn ~loc
+             "'bitstring' can only be used with 'let', 'match', and as '[%bitstring]'"
+           |> raise
+      in
+      { expansion with pexp_attributes = expr.pexp_attributes }
+    )
+;;
+
+let () =
+  let extensions =
+    [ extension
+    ]
+  in
+  Ppx_driver.register_transformation "bitstring" ~extensions
+;;
