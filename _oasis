@@ -1,0 +1,90 @@
+OASISFormat: 0.4
+OCamlVersion: >= 4.03
+Name: ppx_bitstring
+Version: 1.2.0
+License: ISC
+Authors: Xavier Guérin
+BuildTools: ocamlbuild
+Plugins: META (0.4), DevFiles (0.4)
+Synopsis: PPX plugin for the OCAML OPAM bitstring package.
+Description: PPX plugin for the OCAML OPAM bitstring package.
+Homepage: https://github.com/xguerin/ppx_bitstring
+
+SourceRepository github
+  Type:     git
+  Location: https://github.com/xguerin/ppx_bitstring.git
+
+Library ppx_bitstring
+  Path:             src/
+  Modules:          Ppx_bitstring
+  XMETADescription: PPX extension for bitstring
+  XMETARequires:    bitstring,core
+  XMETAExtraLines:  ppx = "ppx_bitstring"
+
+Executable ppx_bitstring
+  Path:           src
+  MainIs:         ppx_bitstring.ml
+  CompiledObject: best
+  Install:        true
+  BuildDepends:
+    compiler-libs.common,
+    core,
+    threads,
+    ppx_tools,
+    ppx_tools.metaquot
+
+Executable parser_test
+  Path: tests
+  MainIs: BitstringParserTest.ml
+  CompiledObject: best
+  Install: false
+  ByteOpt: -ppx ../_build/src/ppx_bitstring.native
+  NativeOpt: -ppx ../_build/src/ppx_bitstring.native
+  BuildDepends:
+    bitstring,
+    ppx_bitstring,
+    oUnit
+
+Test parser_test
+  Run$: flag(tests)
+  TestTools: parser_test
+  Command: $parser_test
+  WorkingDirectory: tests
+
+Executable constructor_test
+  Path: tests
+  MainIs: BitstringConstructorTest.ml
+  CompiledObject: best
+  Install: false
+  ByteOpt: -ppx ../_build/src/ppx_bitstring.native
+  NativeOpt: -ppx ../_build/src/ppx_bitstring.native
+  BuildDepends:
+    bitstring,
+    ppx_bitstring,
+    oUnit
+
+Test constructor_test
+  Run$: flag(tests)
+  TestTools: constructor_test
+  Command: $constructor_test
+  WorkingDirectory: tests
+
+Executable qualifier_test
+  Path: tests
+  MainIs: BitstringQualifierTest.ml
+  CompiledObject: best
+  Install: false
+  ByteOpt: -ppx ../_build/src/ppx_bitstring.native
+  NativeOpt: -ppx ../_build/src/ppx_bitstring.native
+  BuildDepends:
+    bitstring,
+    ppx_bitstring,
+    oUnit,
+    core,
+    threads
+
+Test qualifier_test
+  Run$: flag(tests)
+  TestTools: qualifier_test
+  Command: $qualifier_test
+  WorkingDirectory: tests

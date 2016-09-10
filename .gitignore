@@ -1,5 +1,6 @@
 _build
-ppx_bitstring.native
+*.native
+*.byte
 ppx_bitstring.ext
 temp
 *.o
@@ -11,3 +12,6 @@ temp
 *.swp
 *.out
 *Test
+configure
+setup.data
+setup.ml
