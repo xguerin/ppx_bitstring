@@ -8,9 +8,10 @@ bug-reports: "https://github.com/xguerin/ppx_bitstring/issues"
 dev-repo: "https://github.com/xguerin/ppx_bitstring.git"
 license: "ISC"
 build: [
-  ["ocaml" "setup.ml" "-configure" "--prefix" prefix]
+  ["ocaml" "setup.ml" "-configure" "--prefix" prefix "--%{ounit:enable}%-tests"]
   ["ocaml" "setup.ml" "-build"]
 ]
+build-test: ["ocaml" "setup.ml" "-test"]
 install: [
   ["ocaml" "setup.ml" "-install"]
 ]
