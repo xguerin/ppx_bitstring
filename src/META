@@ -1,0 +1,13 @@
+# OASIS_START
+# DO NOT EDIT (digest: 9c8b51b90fe5f4d9cab5a937652a493a)
+version = "1.2.0"
+description = "PPX extension for bitstring"
+requires = "bitstring core"
+archive(byte) = "ppx_bitstring.cma"
+archive(byte, plugin) = "ppx_bitstring.cma"
+archive(native) = "ppx_bitstring.cmxa"
+archive(native, plugin) = "ppx_bitstring.cmxs"
+ppx = "ppx_bitstring"
+exists_if = "ppx_bitstring.cma"
+# OASIS_STOP
+
