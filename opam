@@ -5,11 +5,23 @@ maintainer: "Xavier Guérin <github@applepine.org>"
 authors: "Xavier Guérin <github@applepine.org>"
 homepage: "https://github.com/xguerin/ppx_bitstring"
 bug-reports: "https://github.com/xguerin/ppx_bitstring/issues"
-license: "BSD"
+dev-repo: "https://github.com/xguerin/ppx_bitstring.git"
+license: "ISC"
 build: [
-  [make]
+  ["ocaml" "setup.ml" "-configure" "--prefix" prefix "--%{ounit:enable}%-tests"]
+  ["ocaml" "setup.ml" "-build"]
 ]
-install: [make "PREFIX=%{prefix}%" "install"]
+build-test: ["ocaml" "setup.ml" "-test"]
+install: [
+  ["ocaml" "setup.ml" "-install"]
+]
 remove: ["ocamlfind" "remove" "ppx_bitstring"]
-depends: "ocamlfind" {build}
+depends: [
+  "bitstring"     {build}
+  "core"          {build}
+  "ocamlbuild"    {build}
+  "ocamlfind"     {build}
+  "ppx_tools"     {build}
+  "ounit"         {build}
+  ]
 available: ocaml-version >= "4.03"
