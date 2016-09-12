@@ -11,7 +11,7 @@ Description: PPX plugin for the OCAML OPAM bitstring package.
 Homepage: https://github.com/xguerin/ppx_bitstring
 AlphaFeatures: ocamlbuild_more_args
 XOCamlbuildPluginTags: package(ppx_driver.ocamlbuild)
-FilesAB: META.ab
+FilesAB: src/META.ab
 
 SourceRepository github
   Type:     git
