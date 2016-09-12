@@ -881,7 +881,7 @@ let transform_single_let ~loc ast expr =
 open Ppx_core.Std
 
 let extension =
-  Extension.declare
+  Extension.V2.declare
     "bitstring"
     Extension.Context.expression
     Ast_pattern.(single_expr_payload __)
