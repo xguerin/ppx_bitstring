@@ -17,7 +17,7 @@ install: [
 ]
 depends: [
   "bitstring"     {build}
-  "core"          {build}
+  "core_kernel"   {build}
   "ocamlbuild"    {build}
   "ocamlfind"     {build}
   "ppx_tools"     {build}

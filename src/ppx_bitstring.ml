@@ -17,7 +17,7 @@
 open Ast_helper
 open Ast_mapper
 open Asttypes
-open Core.Std
+open Core_kernel.Std
 open Format
 open Lexing
 open Longident
@@ -906,9 +906,5 @@ let extension =
 ;;
 
 let () =
-  let extensions =
-    [ extension
-    ]
-  in
-  Ppx_driver.register_transformation "bitstring" ~extensions
+  Ppx_driver.register_transformation "bitstring" ~extensions:[extension]
 ;;
