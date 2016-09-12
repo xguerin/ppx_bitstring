@@ -6,7 +6,6 @@ authors: "Xavier Guérin <github@applepine.org>"
 homepage: "https://github.com/xguerin/ppx_bitstring"
 dev-repo: "https://github.com/xguerin/ppx_bitstring.git"
 bug-reports: "https://github.com/xguerin/ppx_bitstring/issues"
-dev-repo: "https://github.com/xguerin/ppx_bitstring.git"
 license: "ISC"
 build: [
   ["ocaml" "setup.ml" "-configure" "--prefix" prefix "--%{ounit:enable}%-tests"]
