@@ -6,9 +6,15 @@ authors: "Xavier Guérin <github@applepine.org>"
 homepage: "https://github.com/xguerin/ppx_bitstring"
 dev-repo: "https://github.com/xguerin/ppx_bitstring.git"
 bug-reports: "https://github.com/xguerin/ppx_bitstring/issues"
-license: "BSD"
+dev-repo: "https://github.com/xguerin/ppx_bitstring.git"
+license: "ISC"
 build: [
-  [make]
+  ["ocaml" "setup.ml" "-configure" "--prefix" prefix "--%{ounit:enable}%-tests"]
+  ["ocaml" "setup.ml" "-build"]
+]
+build-test: ["ocaml" "setup.ml" "-test"]
+install: [
+  ["ocaml" "setup.ml" "-install"]
 ]
 depends: [
   "bitstring"     {build}
@@ -20,6 +26,5 @@ depends: [
   "ppx_core"      {build}
   "ounit"         {build}
 ]
-install: [make "PREFIX=%{prefix}%" "install"]
 remove: ["ocamlfind" "remove" "ppx_bitstring"]
 available: ocaml-version >= "4.03"

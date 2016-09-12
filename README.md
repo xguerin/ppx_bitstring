@@ -4,7 +4,7 @@ PPX plugin for the OCAML OPAM bitstring package.
 
 ## Overview
 
-The PPX extension is called `ppx_bitstring.ext`. It aims at eventually being a drop-in replacement of the bitstring `ocamlp4` extension.
+The PPX extension is called `ppx_bitstring`. It aims at eventually being a drop-in replacement of the bitstring `ocamlp4` extension.
 
 ## Installation
 
@@ -87,7 +87,7 @@ ocamlc -dparsetree foo.ml
 To see the output of a development version of the extension:
 
 ```bash
-ocamlfind opt -package bitstring,core -thread -dsource -ppx ./ppx_bitstring.ext foo.ml
+ocamlfind opt -package bitstring,core -thread -dsource -ppx ./ppx_bitstring foo.ml
 ```
 
 ## License
