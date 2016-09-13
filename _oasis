@@ -18,7 +18,7 @@ Library ppx_bitstring
   Path:             src/
   Modules:          Ppx_bitstring
   XMETADescription: PPX extension for bitstring
-  XMETARequires:    bitstring,core
+  XMETARequires:    bitstring
   XMETAExtraLines:  ppx = "ppx_bitstring"
   BuildDepends:
     compiler-libs.common,
@@ -32,7 +32,6 @@ Executable ppx_bitstring
   Install:        true
   BuildDepends:
     compiler-libs.common,
-    core,
     threads,
     ppx_tools,
     ppx_tools.metaquot
