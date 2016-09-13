@@ -1,7 +1,7 @@
 OASISFormat: 0.4
 OCamlVersion: >= 4.03
 Name: ppx_bitstring
-Version: 1.2.0
+Version: 1.3.0
 License: ISC
 Authors: Xavier Guérin
 BuildTools: ocamlbuild
@@ -22,7 +22,6 @@ Library ppx_bitstring
   Modules:          Ppx_bitstring
   BuildDepends:
     compiler-libs.common,
-    core_kernel,
     ppx_tools,
     ppx_tools.metaquot,
     ppx_core,
@@ -83,8 +82,7 @@ Executable qualifier_test
   BuildDepends:
     bitstring,
     ppx_bitstring,
-    oUnit,
-    core_kernel
+    oUnit
 
 Test qualifier_test
   Run$: flag(tests)

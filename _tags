@@ -1,7 +1,7 @@
 true: predicate(custom_ppx)
 <as_ppx/ppx_bitstring.{byte,native}>: predicate(ppx_driver)
 # OASIS_START
-# DO NOT EDIT (digest: 0a97ff67ec183f17a74646b09848064b)
+# DO NOT EDIT (digest: ed2ded880eb3847f3d6928cee1e499c5)
 # Ignore VCS directories, you can use the same kind of rule outside
 # OASIS_START/STOP if you want to exclude directories that contains
 # useless stuff for the build process
@@ -19,21 +19,18 @@ true: annot, bin_annot
 # Library ppx_bitstring
 "src/ppx_bitstring.cmxs": use_ppx_bitstring
 <src/*.ml{,i,y}>: package(compiler-libs.common)
-<src/*.ml{,i,y}>: package(core_kernel)
 <src/*.ml{,i,y}>: package(ppx_core)
 <src/*.ml{,i,y}>: package(ppx_driver)
 <src/*.ml{,i,y}>: package(ppx_tools)
 <src/*.ml{,i,y}>: package(ppx_tools.metaquot)
 # Executable ppx
 <as_ppx/ppx.{native,byte}>: package(compiler-libs.common)
-<as_ppx/ppx.{native,byte}>: package(core_kernel)
 <as_ppx/ppx.{native,byte}>: package(ppx_core)
 <as_ppx/ppx.{native,byte}>: package(ppx_driver)
 <as_ppx/ppx.{native,byte}>: package(ppx_tools)
 <as_ppx/ppx.{native,byte}>: package(ppx_tools.metaquot)
 <as_ppx/ppx.{native,byte}>: use_ppx_bitstring
 <as_ppx/*.ml{,i,y}>: package(compiler-libs.common)
-<as_ppx/*.ml{,i,y}>: package(core_kernel)
 <as_ppx/*.ml{,i,y}>: package(ppx_core)
 <as_ppx/*.ml{,i,y}>: package(ppx_driver)
 <as_ppx/*.ml{,i,y}>: package(ppx_tools)
@@ -46,7 +43,6 @@ true: annot, bin_annot
 <tests/*.ml{,i,y}>: oasis_executable_parser_test_native
 <tests/BitstringParserTest.{native,byte}>: package(bitstring)
 <tests/BitstringParserTest.{native,byte}>: package(compiler-libs.common)
-<tests/BitstringParserTest.{native,byte}>: package(core_kernel)
 <tests/BitstringParserTest.{native,byte}>: package(oUnit)
 <tests/BitstringParserTest.{native,byte}>: package(ppx_core)
 <tests/BitstringParserTest.{native,byte}>: package(ppx_driver)
@@ -60,7 +56,6 @@ true: annot, bin_annot
 <tests/*.ml{,i,y}>: oasis_executable_constructor_test_native
 <tests/BitstringConstructorTest.{native,byte}>: package(bitstring)
 <tests/BitstringConstructorTest.{native,byte}>: package(compiler-libs.common)
-<tests/BitstringConstructorTest.{native,byte}>: package(core_kernel)
 <tests/BitstringConstructorTest.{native,byte}>: package(oUnit)
 <tests/BitstringConstructorTest.{native,byte}>: package(ppx_core)
 <tests/BitstringConstructorTest.{native,byte}>: package(ppx_driver)
@@ -74,7 +69,6 @@ true: annot, bin_annot
 <tests/*.ml{,i,y}>: oasis_executable_qualifier_test_native
 <tests/BitstringQualifierTest.{native,byte}>: package(bitstring)
 <tests/BitstringQualifierTest.{native,byte}>: package(compiler-libs.common)
-<tests/BitstringQualifierTest.{native,byte}>: package(core_kernel)
 <tests/BitstringQualifierTest.{native,byte}>: package(oUnit)
 <tests/BitstringQualifierTest.{native,byte}>: package(ppx_core)
 <tests/BitstringQualifierTest.{native,byte}>: package(ppx_driver)
@@ -83,7 +77,6 @@ true: annot, bin_annot
 <tests/BitstringQualifierTest.{native,byte}>: use_ppx_bitstring
 <tests/*.ml{,i,y}>: package(bitstring)
 <tests/*.ml{,i,y}>: package(compiler-libs.common)
-<tests/*.ml{,i,y}>: package(core_kernel)
 <tests/*.ml{,i,y}>: package(oUnit)
 <tests/*.ml{,i,y}>: package(ppx_core)
 <tests/*.ml{,i,y}>: package(ppx_driver)

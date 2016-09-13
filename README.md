@@ -1,6 +1,9 @@
 # ppx_bitstring
 
-PPX plugin for the OCAML OPAM bitstring package [![Build Status](https://travis-ci.org/xguerin/ppx_bitstring.svg?branch=master)](https://travis-ci.org/xguerin/ppx_bitstring).
+[![Build Status](https://travis-ci.org/xguerin/ppx_bitstring.svg?branch=master)](https://travis-ci.org/xguerin/ppx_bitstring)
+
+PPX plugin for the OCAML OPAM bitstring package.
+
 
 ## Overview
 
