@@ -14,10 +14,21 @@
  * OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
  *)
 
+(* [Ast_helper] shadows [Str], so we define this first *)
+let split_string ~on s =
+  Misc.split s on
+;;
+
+let option_bind opt f =
+  match opt with
+  | None   -> None
+  | Some v -> f v
+;;
+
 open Ast_helper
 open Ast_mapper
 open Asttypes
-open Core.Std
+open StdLabels
 open Format
 open Lexing
 open Longident
@@ -144,7 +155,7 @@ let rec process_expr_loc ~loc expr =
     let lident = Location.mkloc ident.txt loc in
     { expr with pexp_desc = Pexp_ident(lident); pexp_loc = loc }
   | { pexp_desc = Pexp_tuple(ops) } ->
-    let fld = List.fold
+    let fld = List.fold_left
         ~init:[]
         ~f:(fun acc exp -> acc @ [ process_expr_loc ~loc exp ]) ops
     in { expr with pexp_desc = Pexp_tuple(fld); pexp_loc = loc }
@@ -157,7 +168,7 @@ let rec process_expr_loc ~loc expr =
     { expr with pexp_desc = Pexp_construct(lident, lops); pexp_loc = loc }
   | { pexp_desc = Pexp_apply(ident, ops) } ->
     let lident = process_expr_loc ~loc ident in
-    let fld = List.fold
+    let fld = List.fold_left
         ~init:[]
         ~f:(fun acc (lbl, exp) -> acc @ [ (lbl, (process_expr_loc ~loc exp)) ]) ops
     in { expr with pexp_desc = Pexp_apply(lident, fld); pexp_loc = loc }
@@ -228,7 +239,7 @@ let find_loc_boundaries ~loc last rem =
 let rec split_loc_rec ~loc = function
   | [] -> []
   | hd :: tl ->
-    let line_list = String.split ~on:'\n' hd
+    let line_list = split_string ~on:'\n' hd
                     |> List.rev
                     |> List.map ~f:String.length in
     begin
@@ -242,7 +253,7 @@ let rec split_loc_rec ~loc = function
 
 let split_loc ~loc lst =
   split_loc_rec ~loc lst
-  |> List.map2_exn lst ~f:(fun e loc -> Location.mkloc (StdLabels.Bytes.trim e) loc)
+  |> List.map2 lst ~f:(fun e loc -> Location.mkloc (Bytes.trim e) loc)
 ;;
 
 (* Processing qualifiers *)
@@ -420,7 +431,7 @@ let rec evaluate_expr = function
 (* Parsing fields *)
 
 let parse_match_fields str =
-  String.split ~on:':' str.txt
+  split_string ~on:':' str.txt
   |> split_loc ~loc:str.loc
   |> function
   | [ { txt = "_" ; loc } as pat ] ->
@@ -440,7 +451,7 @@ let parse_match_fields str =
 
 let parse_const_fields str =
   let open Qualifiers in
-  String.split ~on:':' str.txt
+  split_string ~on:':' str.txt
   |> split_loc ~loc:str.loc
   |> function
   | [ vl; len ] ->
@@ -469,7 +480,7 @@ let parse_const_fields str =
 (* Match generators *)
 
 let check_field_len ~loc (l, q) =
-  let open Option.Monad_infix in
+  let (>>=) = option_bind in
   match q.Qualifiers.value_type with
   | Some (Type.String) ->
     evaluate_expr l >>= fun v ->
@@ -736,7 +747,7 @@ let gen_case ~mapper org_off res (dat, off, len) case =
     let rhs = mapper.Ast_mapper.expr mapper case.pc_rhs in
     let eres = mkevar ~loc res in
     let beh = [%expr [%e eres] := Some ([%e rhs]); raise Exit][@metaloc loc]
-    in String.split ~on:';' value
+    in split_string ~on:';' value
     |> split_loc ~loc
     |> List.map ~f:(fun e -> parse_match_fields e)
     |> gen_fields ~loc org_off (dat, off, len) beh
@@ -777,7 +788,7 @@ let gen_cases ~mapper ident loc cases =
   and cpos = Ast_convenience.int ~loc loc.loc_start.pos_cnum
   in
   cases
-  |> List.fold
+  |> List.fold_left
     ~init:[]
     ~f:(fun acc case -> acc @ [ gen_case ~mapper offN resN (datN, offNN, lenNN) case ])
   |> gen_cases_sequence ~loc
@@ -865,7 +876,7 @@ let gen_constructor loc sym = function
 let gen_assignment_size_of_field loc = function
   | (_, None, _) -> [%expr 0]
   | (f, Some (s), q) -> begin
-      match (evaluate_expr s), Option.bind q (fun q -> q.Qualifiers.value_type) with
+      match (evaluate_expr s), option_bind q (fun q -> q.Qualifiers.value_type) with
       | Some (v), Some (Type.String) ->
          if v = (-1) then
            [%expr (String.length [%e f] * 8)]
@@ -926,7 +937,7 @@ let gen_assignment_behavior loc sym fields =
 ;;
 
 let parse_assignment_behavior loc sym value =
-  (String.split ~on:';' value)
+  (split_string ~on:';' value)
   |> split_loc ~loc
   |> List.map ~f:(fun flds -> parse_const_fields flds)
   |> gen_assignment_behavior loc sym

@@ -1,5 +1,5 @@
 # OASIS_START
-# DO NOT EDIT (digest: 9c8b51b90fe5f4d9cab5a937652a493a)
+# DO NOT EDIT (digest: 2693755611846f5b54e53467991efac1)
 version = "1.3.0"
 description = "PPX extension for bitstring"
 requires = "bitstring core"
