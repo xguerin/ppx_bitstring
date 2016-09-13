@@ -58,6 +58,8 @@ The pattern syntax is the same as the one of the [original extension](http://peo
 
 ## Additional features
 
+### `map` qualifier
+
 This extension also supports a `map` qualifier which applies a lambda to a parsed value and stores the result in the field name:
 
 ```ocaml
@@ -71,6 +73,21 @@ let field = (fun v -> do_something_with v) temporary_parsed_field
 ```
 
 The `map` and `bind` qualifiers are mutually exclusive.
+
+### Pattern matching using `function`
+
+This extension adds support for pattern matching using the `function` keyword:
+
+```ocaml
+let pattern_matcher = function%bitstring
+| {|
+   ; 1 : 1
+   ; a : 2
+   ; b : 16 : bigendian
+   ; ...
+   |} -> (* Do something *)
+| {| _ |} -> (* Do something else *)
+```
 
 ## Error reporting
 
