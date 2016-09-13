@@ -655,13 +655,13 @@ and gen_match ~loc org_off (dat, off, len) (p, l, q) beh fields =
 and gen_offset_saver ~loc org_off (dat, off, len) (p, l, q) beh =
   let open Qualifiers in
   match q.save_offset_to with
-  | Some { pexp_desc = Pexp_ident ({ txt; _ }) } ->
-    let ptxt = mkpvar ~loc (Longident.last txt)
-    and eoff = mkevar ~loc off
-    and eorg_off = mkevar ~loc org_off in
+  | Some { pexp_desc = Pexp_ident ({ txt; loc = eloc }) } ->
+    let ptxt = mkpvar ~loc:eloc (Longident.last txt)
+    and eoff = mkevar ~loc:eloc off
+    and eorg_off = mkevar ~loc:eloc org_off in
     [%expr
       let [%p (ptxt)] = [%e eoff] - [%e eorg_off] in [%e beh]]
-      [@metaloc loc]
+      [@metaloc eloc]
   | Some _ | None -> beh
 
 and gen_unbound_string ~loc org_off (dat, off, len) (l, q) beh fields p =
