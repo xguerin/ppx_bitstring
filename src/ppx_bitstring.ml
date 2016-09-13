@@ -761,7 +761,7 @@ let rec gen_cases_sequence ~loc = function
   | hd :: tl -> Exp.sequence ~loc hd (gen_cases_sequence ~loc tl)
 ;;
 
-let gen_cases ~mapper ident loc cases =
+let gen_cases ~mapper ~loc ident cases =
   let open Location in
   let datN = mksym "data"
   and offN = mksym "off"
@@ -806,9 +806,17 @@ let gen_cases ~mapper ident loc cases =
     [@metaloc loc]
 ;;
 
-(* constructor expressions *)
+let gen_function ~mapper ~loc cases =
+  let casN = mksym "case" in
+  let pcasN = mkpvar ~loc casN
+  and ecasN = mkevar ~loc casN in
+  [%expr
+    (fun [%p pcasN] -> [%e (gen_cases ~mapper ~loc ecasN cases)])]
+    [@metaloc loc]
 
-let gen_constructor loc sym = function
+(* Constructor generators *)
+
+let gen_constructor ~loc sym = function
   | (l, Some (s), Some(q)) ->
     let open Location in
     let open Qualifiers in
@@ -873,7 +881,7 @@ let gen_constructor loc sym = function
   | _ -> location_exn ~loc "Invalid field format"
 ;;
 
-let gen_assignment_size_of_field loc = function
+let gen_assignment_size_of_field ~loc = function
   | (_, None, _) -> [%expr 0]
   | (f, Some (s), q) -> begin
       match (evaluate_expr s), option_bind q (fun q -> q.Qualifiers.value_type) with
@@ -901,16 +909,16 @@ let gen_assignment_size_of_field loc = function
     end
 ;;
 
-let rec gen_assignment_size loc = function
+let rec gen_assignment_size ~loc = function
   | [] -> [%expr 0]
   | field :: tl ->
-     let this = gen_assignment_size_of_field loc field in
-     let next = gen_assignment_size loc tl in
+     let this = gen_assignment_size_of_field ~loc field in
+     let next = gen_assignment_size ~loc tl in
      [%expr [%e this] + ([%e next])][@metaloc loc]
 ;;
 
-let gen_assignment_behavior loc sym fields =
-  let size = gen_assignment_size loc fields in
+let gen_assignment_behavior ~loc sym fields =
+  let size = gen_assignment_size ~loc fields in
   let ref = Ast_convenience.evar "Bitstring.Buffer.contents" in
   let res = (Ast_convenience.evar sym) in
   let rep = Ast_convenience.app ref [ res ] in
@@ -926,37 +934,38 @@ let gen_assignment_behavior loc sym fields =
              then _res else raise Exit]
   in
   let exprs = List.fold_right
-      ~f:(fun fld acc -> [ (gen_constructor loc sym fld) ] @ acc)
+      ~f:(fun fld acc -> [ (gen_constructor ~loc sym fld) ] @ acc)
       ~init:[post]
       fields in
-  let seq = (Ast_convenience.sequence exprs) in
+  let seq = Ast_convenience.sequence exprs in
   let ecl = Ast_convenience.evar "Bitstring.Buffer.create" in
   let ini = Ast_convenience.app ecl [ (Ast_convenience.unit ()) ] in
   let res = mkpvar ~loc sym in
   [%expr let [%p res] = [%e ini] in [%e seq]][@metaloc loc]
 ;;
 
-let parse_assignment_behavior loc sym value =
+let parse_assignment_behavior ~loc sym value =
   (split_string ~on:';' value)
   |> split_loc ~loc
   |> List.map ~f:(fun flds -> parse_const_fields flds)
-  |> gen_assignment_behavior loc sym
+  |> gen_assignment_behavior ~loc sym
 ;;
 
-let gen_constructor_expr loc value =
+let gen_constructor_expr ~loc value =
   let sym = mksym "constructor" in
   let pat = mkpvar ~loc sym in
   let idt = Ast_convenience.evar sym in
   let fnc = Exp.apply ~loc idt [ (Nolabel, (Ast_convenience.unit ())) ] in
-  let beh = parse_assignment_behavior loc sym value in
+  let beh = parse_assignment_behavior ~loc sym value in
   [%expr let [%p pat] = fun () -> [%e beh] in [%e fnc]]
 ;;
 
-(* transform `let%bitstring foo = {| .. |} in`
-   into      `let foo = [%bitstring {| .. |}] in`
-*)
+(*
+ * transform `let%bitstring foo = {| .. |} in`
+ * into      `let foo = [%bitstring {| .. |}] in`
+ *)
 
-let transform_single_let ~mapper loc ast expr =
+let transform_single_let ~mapper ~loc ast expr =
   match ast.pvb_pat.ppat_desc, ast.pvb_expr.pexp_desc with
   | Parsetree.Ppat_var (s), Pexp_constant (Pconst_string (value, _)) ->
     let pat = mkpvar ~loc s.txt in
@@ -972,10 +981,10 @@ let transform_single_let ~mapper loc ast expr =
   | _ -> location_exn ~loc "Invalid pattern type"
 ;;
 
-let rec transform_let ~mapper loc expr = function
+let rec transform_let ~mapper ~loc expr = function
   | []        -> expr
-  | hd :: tl  -> transform_let ~mapper loc expr tl
-                 |> transform_single_let ~mapper loc hd
+  | hd :: tl  -> transform_let ~mapper ~loc expr tl
+                 |> transform_single_let ~mapper ~loc hd
 ;;
 
 (* Mapper *)
@@ -990,21 +999,28 @@ let ppx_bitstring_expr_mapper mapper = function
               pexp_loc = loc;
               pexp_desc = Pexp_match (ident, cases)
             }, _)
-        }] -> gen_cases ~mapper ident loc cases
+        }] -> gen_cases ~mapper ~loc ident cases
+      (* Evaluation of a function expression *)
+      | PStr [{
+          pstr_desc = Pstr_eval ({
+              pexp_loc = loc;
+              pexp_desc = Pexp_function (cases)
+            }, _)
+        }] -> gen_function ~mapper ~loc cases
       (* Evaluation of a constructor expression *)
       | PStr [{
           pstr_desc = Pstr_eval ({
               pexp_loc = loc;
               pexp_desc = Pexp_constant (Pconst_string (value, _))
             }, _)
-        }] -> gen_constructor_expr loc value
+        }] -> gen_constructor_expr ~loc value
       (* Evaluation of a let expression *)
       | PStr [{
           pstr_desc = Pstr_eval ({
               pexp_loc = loc;
               pexp_desc = Pexp_let (Asttypes.Nonrecursive, bindings, expr)
             }, _)
-        }] -> transform_let ~mapper loc expr bindings
+        }] -> transform_let ~mapper ~loc expr bindings
       | PStr [{
           pstr_desc = Pstr_eval ({
               pexp_loc = loc;
