@@ -935,6 +935,7 @@ let dispatch_default = MyOCamlbuildBase.dispatch_default conf package_default;;
 (* OASIS_STOP *)
 let () =
   Ocamlbuild_plugin.dispatch (fun hook ->
+      Jane_street_ocamlbuild_goodies.alt_cmxs_of_cmxa_rule hook;
       Ppx_driver_ocamlbuild.dispatch hook;
       dispatch_default hook
     )
