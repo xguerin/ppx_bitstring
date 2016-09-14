@@ -14,19 +14,8 @@
  * OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
  *)
 
-(* [Ast_helper] shadows [Str], so we define this first *)
-let split_string ~on s =
-  Misc.split s on
-;;
-
-let option_bind opt f =
-  match opt with
-  | None   -> None
-  | Some v -> f v
-;;
-
-open Ast_helper
 open Ast_mapper
+open Ast_convenience
 open Asttypes
 open StdLabels
 open Format
@@ -134,19 +123,21 @@ let location_exn ~loc msg =
 
 (* Helper functions *)
 
+let split_string ~on s =
+  Misc.split s on
+;;
+
+let option_bind opt f =
+  match opt with
+  | None   -> None
+  | Some v -> f v
+;;
+
 let mksym =
   let i = ref 1000 in
   fun name ->
     incr i; let i = !i in
     sprintf "__ppxbitstring_%s_%d" name i
-;;
-
-let mkpvar ~loc name =
-  Ast_convenience.pvar ~loc name
-;;
-
-let mkevar ~loc name =
-  Ast_convenience.evar ~loc name
 ;;
 
 let rec process_expr_loc ~loc expr =
@@ -554,9 +545,9 @@ let gen_int_extractor ~loc (dat, off, len) (l, q) edat eoff elen =
 let gen_extractor ~loc (dat, off, len) (l, q) =
   let open Qualifiers
   in
-  let edat = mkevar ~loc dat
-  and eoff = mkevar ~loc off
-  and elen = mkevar ~loc len
+  let edat = evar ~loc dat
+  and eoff = evar ~loc off
+  and elen = evar ~loc len
   in
   match q.value_type with
   | Some (Type.Bitstring) -> begin
@@ -589,10 +580,10 @@ let gen_value ~loc (dat, off, len) (l, q) =
 ;;
 
 let rec gen_next org_off ~loc (dat, off, len) (p, l, q) beh fields =
-  let plen = mkpvar ~loc len
-  and poff = mkpvar ~loc off
-  and elen = mkevar ~loc len
-  and eoff = mkevar ~loc off
+  let plen = pvar ~loc len
+  and poff = pvar ~loc off
+  and elen = evar ~loc len
+  and eoff = evar ~loc off
   in
   evaluate_expr l
   |> function
@@ -610,10 +601,10 @@ let rec gen_next org_off ~loc (dat, off, len) (p, l, q) beh fields =
       [@metaloc loc]
 
 and gen_next_all ~loc org_off (dat, off, len) beh fields =
-  let plen = mkpvar ~loc len
-  and poff = mkpvar ~loc off
-  and elen = mkevar ~loc len
-  and eoff = mkevar ~loc off
+  let plen = pvar ~loc len
+  and poff = pvar ~loc off
+  and elen = evar ~loc len
+  and eoff = evar ~loc off
   in
   [%expr
     let [%p poff] = [%e eoff] + [%e elen]
@@ -623,18 +614,18 @@ and gen_next_all ~loc org_off (dat, off, len) beh fields =
 
 and gen_match_check ~loc = function
   | Some chk  -> chk
-  | None      -> Ast_convenience.constr ~loc "true" []
+  | None      -> constr ~loc "true" []
 
 and gen_match ~loc org_off (dat, off, len) (p, l, q) beh fields =
   let open Qualifiers in
   let valN = mksym "value"
   in
-  let pvalN = mkpvar ~loc valN
-  and evalN = mkevar ~loc valN
-  and poff = mkpvar ~loc off
-  and eoff = mkevar ~loc off
-  and plen = mkpvar ~loc len
-  and elen = mkevar ~loc len
+  let pvalN = pvar ~loc valN
+  and evalN = evar ~loc valN
+  and poff = pvar ~loc off
+  and eoff = evar ~loc off
+  and plen = pvar ~loc len
+  and elen = evar ~loc len
   in
   gen_match_check ~loc q.check
   |> fun g ->
@@ -656,9 +647,9 @@ and gen_offset_saver ~loc org_off (dat, off, len) (p, l, q) beh =
   let open Qualifiers in
   match q.save_offset_to with
   | Some { pexp_desc = Pexp_ident ({ txt; loc = eloc }) } ->
-    let ptxt = mkpvar ~loc:eloc (Longident.last txt)
-    and eoff = mkevar ~loc:eloc off
-    and eorg_off = mkevar ~loc:eloc org_off in
+    let ptxt = pvar ~loc:eloc (Longident.last txt)
+    and eoff = evar ~loc:eloc off
+    and eorg_off = evar ~loc:eloc org_off in
     [%expr
       let [%p (ptxt)] = [%e eoff] - [%e eorg_off] in [%e beh]]
       [@metaloc eloc]
@@ -679,7 +670,7 @@ and gen_unbound_string ~loc org_off (dat, off, len) (l, q) beh fields p =
     location_exn ~loc "Unbound string or bitstring can only be assigned to a variable or skipped"
 
 and gen_bound_bitstring ~loc org_off (dat, off, len) (l, q) beh fields p =
-  let elen = mkevar ~loc len in
+  let elen = evar ~loc len in
   match p with
   | { ppat_desc = Ppat_var(_) } ->
     [%expr
@@ -699,14 +690,14 @@ and gen_bound_bitstring ~loc org_off (dat, off, len) (l, q) beh fields p =
 
 and gen_bound_string ~loc org_off (dat, off, len) (l, q) beh fields p =
   [%expr
-    if [%e (mkevar ~loc len)] >= [%e l] then
+    if [%e (evar ~loc len)] >= [%e l] then
       [%e (gen_match ~loc org_off (dat, off, len) (p, l, q) beh fields)]
     else ()]
     [@metaloc loc]
 
 and gen_bound_int ~loc org_off (dat, off, len) (l, q) beh fields p =
   [%expr
-    if [%e l] >= 1 && [%e l] <= 64 && [%e (mkevar ~loc len)] >= [%e l] then
+    if [%e l] >= 1 && [%e l] <= 64 && [%e (evar ~loc len)] >= [%e l] then
       [%e (gen_match ~loc org_off (dat, off, len) (p, l, q) beh fields)]
     else ()]
     [@metaloc loc]
@@ -745,7 +736,7 @@ let gen_case ~mapper org_off res (dat, off, len) case =
   match case.pc_lhs.ppat_desc with
   | Ppat_constant (Pconst_string (value, _)) ->
     let rhs = mapper.Ast_mapper.expr mapper case.pc_rhs in
-    let eres = mkevar ~loc res in
+    let eres = evar ~loc res in
     let beh = [%expr [%e eres] := Some ([%e rhs]); raise Exit][@metaloc loc]
     in split_string ~on:';' value
     |> split_loc ~loc
@@ -758,7 +749,7 @@ let gen_case ~mapper org_off res (dat, off, len) case =
 let rec gen_cases_sequence ~loc = function
   | [] -> location_exn ~loc "Empty case list"
   | [hd] -> hd
-  | hd :: tl -> Exp.sequence ~loc hd (gen_cases_sequence ~loc tl)
+  | hd :: tl -> Ast_helper.Exp.sequence ~loc hd (gen_cases_sequence ~loc tl)
 ;;
 
 let gen_cases ~mapper ~loc ident cases =
@@ -771,21 +762,21 @@ let gen_cases ~mapper ~loc ident cases =
   and offNN = mksym "off"
   and lenNN = mksym "len"
   in
-  let pdatN = mkpvar ~loc datN
-  and poffN = mkpvar ~loc offN
-  and eoffN = mkevar ~loc offN
-  and plenN = mkpvar ~loc lenN
-  and elenN = mkevar ~loc lenN
-  and palgN = mkpvar ~loc algN
-  and presN = mkpvar ~loc resN
-  and eresN = mkevar ~loc resN
-  and poffNN = mkpvar ~loc offNN
-  and plenNN = mkpvar ~loc lenNN
+  let pdatN = pvar ~loc datN
+  and poffN = pvar ~loc offN
+  and eoffN = evar ~loc offN
+  and plenN = pvar ~loc lenN
+  and elenN = evar ~loc lenN
+  and palgN = pvar ~loc algN
+  and presN = pvar ~loc resN
+  and eresN = evar ~loc resN
+  and poffNN = pvar ~loc offNN
+  and plenNN = pvar ~loc lenNN
   in
   let tuple = [%pat? ([%p pdatN], [%p poffN], [%p plenN])][@metaloc loc]
-  and fname = Ast_convenience.str ~loc loc.loc_start.pos_fname
-  and lpos = Ast_convenience.int ~loc loc.loc_start.pos_lnum
-  and cpos = Ast_convenience.int ~loc loc.loc_start.pos_cnum
+  and fname = str ~loc loc.loc_start.pos_fname
+  and lpos = int ~loc loc.loc_start.pos_lnum
+  and cpos = int ~loc loc.loc_start.pos_cnum
   in
   cases
   |> List.fold_left
@@ -808,105 +799,111 @@ let gen_cases ~mapper ~loc ident cases =
 
 let gen_function ~mapper ~loc cases =
   let casN = mksym "case" in
-  let pcasN = mkpvar ~loc casN
-  and ecasN = mkevar ~loc casN in
+  let pcasN = pvar ~loc casN
+  and ecasN = evar ~loc casN in
   [%expr
     (fun [%p pcasN] -> [%e (gen_cases ~mapper ~loc ecasN cases)])]
     [@metaloc loc]
 
 (* Constructor generators *)
 
+let gen_constructor_exn ~loc =
+  let open Location in
+  [%expr Bitstring.Construct_failure (
+      [%e str ~loc "Bad field value"],
+        [%e str ~loc "None"],
+        [%e int ~loc loc.loc_start.pos_lnum],
+        [%e int ~loc loc.loc_start.pos_cnum])]
+    [@metaloc loc]
+;;
+
+let gen_constructor_bitstring ~loc sym l =
+  [%expr
+    Bitstring.construct_bitstring [%e evar ~loc sym] [%e l]]
+    [@metaloc loc]
+;;
+
+let gen_constructor_string ~loc sym l =
+  [%expr
+    Bitstring.construct_string [%e evar ~loc sym] [%e l]]
+    [@metaloc loc]
+;;
+
+let get_1_bit_constr_value ~loc l =
+  match (evaluate_expr l) with
+    | Some (1)        -> [%expr true][@metaloc loc]
+    | Some (0)        -> [%expr false][@metaloc loc]
+    | Some (_) | None -> l
+;;
+
+let gen_constructor_int ~loc sym (l, s, q) =
+  let open Qualifiers in
+  let eexc = gen_constructor_exn ~loc
+  and esym = evar ~loc sym in
+  let (fname, vl, sz) = match (evaluate_expr s), q.sign, q.endian with
+    (* 1-bit type *)
+    | Some (size), Some (_), Some (_) when size = 1 ->
+      ("Bitstring.construct_bit", get_1_bit_constr_value ~loc l, [%expr 1])
+    (* 8-bit type *)
+    | Some (size), Some (sign), Some (_) when size >= 2 && size <= 8 ->
+      let sn = Sign.to_string sign in
+      let ex = sprintf "Bitstring.construct_char_%s" sn in
+      (ex, l, int ~loc size)
+    (* 16|32|64-bit type *)
+    | Some (size), Some (sign), Some (Endian.Referred r) ->
+      let ss = Sign.to_string sign and it = get_inttype ~loc size in
+      let ex = sprintf "Bitstring.construct_%s_ee_%s" it ss in
+      (ex, l, int ~loc size)
+    | Some (size), Some (sign), Some (endian) ->
+      let tp = get_inttype ~loc size
+      and en = Endian.to_string endian
+      and sn = Sign.to_string sign in
+      let ex = sprintf "Bitstring.construct_%s_%s_%s" tp en sn in
+      (ex, l, int ~loc size)
+    (* Invalid type *)
+    | _, _, _ ->
+      location_exn ~loc "Invalid type"
+  in
+  [%expr
+    [%e evar ~loc fname] [%e esym] [%e vl] [%e sz] [%e eexc]]
+    [@metaloc loc]
+;;
+
+let gen_constructor_complete ~loc sym (l, s, q) =
+  match q.Qualifiers.value_type with
+  | Some (Type.Bitstring) -> gen_constructor_bitstring ~loc sym l
+  | Some (Type.String)    -> gen_constructor_string ~loc sym l
+  | Some (Type.Int)       -> gen_constructor_int ~loc sym (l, s, q)
+  | _                     -> location_exn ~loc "Invalid type"
+;;
+
 let gen_constructor ~loc sym = function
-  | (l, Some (s), Some(q)) ->
-    let open Location in
-    let open Qualifiers in
-    let exc = Ast_convenience.constr ~loc
-        "Bitstring.Construct_failure"
-        [ Ast_convenience.str ~loc "Bad field value";
-          Ast_convenience.str ~loc "None";
-          Ast_convenience.int ~loc loc.loc_start.pos_lnum;
-          Ast_convenience.int ~loc loc.loc_start.pos_cnum ]
-    in begin match q.value_type with
-      | Some (Type.Bitstring) ->
-        let ex = "Bitstring.construct_bitstring" in
-        Ast_convenience.app ~loc
-          (Ast_convenience.evar ~loc ex)
-          [ (Ast_convenience.evar ~loc sym); l ]
-      | Some (Type.String) ->
-        let ex = "Bitstring.construct_string" in
-        Ast_convenience.app ~loc
-          (Ast_convenience.evar ~loc ex)
-          [ (Ast_convenience.evar ~loc sym); l ]
-      | Some (Type.Int) -> begin
-          match (evaluate_expr s), q.sign, q.endian with
-          (* 1-bit type *)
-          | Some (size), Some (_), Some (_) when size = 1 -> begin
-              let ex = "Bitstring.construct_bit" in
-              let vl = match (evaluate_expr l) with
-                | Some (1)        -> Ast_convenience.constr ~loc "true" []
-                | Some (0)        -> Ast_convenience.constr ~loc "false" []
-                | Some (_) | None -> l
-              in Ast_convenience.app ~loc
-                (Ast_convenience.evar ~loc ex)
-                [ (Ast_convenience.evar ~loc sym); vl; (Ast_convenience.int ~loc 1); exc ]
-            end
-          (* 8-bit type *)
-          | Some (size), Some (sign), Some (_) when size >= 2 && size <= 8 ->
-            let sn = Sign.to_string sign in
-            let ex = sprintf "Bitstring.construct_char_%s" sn in
-            Ast_convenience.app ~loc
-              (Ast_convenience.evar ~loc ex)
-              [ (Ast_convenience.evar ~loc sym); l; (Ast_convenience.int ~loc size); exc ]
-          (* 16|32|64-bit type *)
-          | Some (size), Some (sign), Some (Endian.Referred r) ->
-            let ss = Sign.to_string sign and it = get_inttype ~loc size in
-            let ex = sprintf "Bitstring.construct_%s_ee_%s" it ss in
-            Ast_convenience.app ~loc
-              (Ast_convenience.evar ex)
-              [ r; (Ast_convenience.evar ~loc sym); l; (Ast_convenience.int ~loc size); exc ]
-          | Some (size), Some (sign), Some (endian) ->
-            let tp = get_inttype ~loc size in
-            let en = Endian.to_string endian in
-            let sn = Sign.to_string sign in
-            let ex = sprintf "Bitstring.construct_%s_%s_%s" tp en sn in
-            Ast_convenience.app ~loc
-              (Ast_convenience.evar ~loc ex)
-              [ (Ast_convenience.evar ~loc sym); l; (Ast_convenience.int ~loc size); exc ]
-          (* Invalid type *)
-          | _, _, _ ->
-            location_exn ~loc "Invalid type"
-        end
-      | _ -> location_exn ~loc "Invalid type"
-    end
+  | (l, Some (s), Some (q)) -> gen_constructor_complete ~loc sym (l, s, q)
   | _ -> location_exn ~loc "Invalid field format"
+;;
+
+let gen_assignment_size_of_sized_field ~loc (f, s, q) =
+  match (evaluate_expr s), option_bind q (fun q -> q.Qualifiers.value_type) with
+  | Some (-1),  Some (Type.String) -> [%expr (String.length [%e f] * 8)]
+  | Some (v),   Some (Type.String) when v > 0 && (v mod 8) = 0 -> s
+  | Some (_),   Some (Type.String) ->
+      location_exn ~loc "Length of string must be > 0 and multiple of 8, or the special value -1"
+  | None, Some (Type.String) -> s
+  | Some (-1),  Some (Type.Bitstring) -> [%expr (Bitstring.bitstring_length [%e f])]
+  | Some (v),   Some (Type.Bitstring) when v > 0 -> s
+  | Some (_),   Some (Type.Bitstring) ->
+      location_exn ~loc "Length of bitstring must be >= 0 or the special value -1"
+  | None,       Some (Type.Bitstring) -> s
+  | Some (v),   _ when v > 0 -> s
+  | Some (v),   _ ->
+      location_exn ~loc "Negative or null field size in constructor"
+  | None,       _ ->
+    location_exn ~loc "Invalid field size in constructor"
 ;;
 
 let gen_assignment_size_of_field ~loc = function
   | (_, None, _) -> [%expr 0]
-  | (f, Some (s), q) -> begin
-      match (evaluate_expr s), option_bind q (fun q -> q.Qualifiers.value_type) with
-      | Some (v), Some (Type.String) ->
-         if v = (-1) then
-           [%expr (String.length [%e f] * 8)]
-         else if v > 0 && (v mod 8) = 0 then
-           s
-         else
-           location_exn ~loc "Length of string must be > 0 and multiple of 8, or the special value -1"
-      | None, Some (Type.String) -> s
-      | Some (v), Some (Type.Bitstring) ->
-         if v = (-1) then
-           [%expr (Bitstring.bitstring_length [%e f])]
-         else if v > 0 then
-           s
-         else
-           location_exn ~loc "Length of bitstring must be >= 0 or the special value -1"
-      | None, Some (Type.Bitstring) -> s
-      | Some (v), _ ->
-         if v <= 0 then
-           location_exn ~loc "Negative or null field size in constructor"
-         else s
-      | None, _ -> location_exn ~loc "Invalid field size in constructor"
-    end
+  | (f, Some (s), q) -> gen_assignment_size_of_sized_field ~loc (f, s, q)
 ;;
 
 let rec gen_assignment_size ~loc = function
@@ -919,29 +916,28 @@ let rec gen_assignment_size ~loc = function
 
 let gen_assignment_behavior ~loc sym fields =
   let size = gen_assignment_size ~loc fields in
-  let ref = Ast_convenience.evar "Bitstring.Buffer.contents" in
-  let res = (Ast_convenience.evar sym) in
-  let rep = Ast_convenience.app ref [ res ] in
-  let post = match (evaluate_expr size) with
-    | Some (v) ->
-      let vexpr = Ast_convenience.int v in
-      [%expr let _res = [%e rep] in
-             if (Bitstring.bitstring_length _res) = [%e vexpr]
-             then _res else raise Exit]
-    | None ->
-      [%expr let _res = [%e rep] in
-             if (Bitstring.bitstring_length _res) = [%e size]
-             then _res else raise Exit]
+  let res = evar ~loc sym in
+  let rep = [%expr Bitstring.Buffer.contents [%e res]][@metaloc loc] in
+  let len = match (evaluate_expr size) with
+    | Some (v)  -> int v
+    | None      -> size
   in
-  let exprs = List.fold_right
-      ~f:(fun fld acc -> [ (gen_constructor ~loc sym fld) ] @ acc)
-      ~init:[post]
-      fields in
-  let seq = Ast_convenience.sequence exprs in
-  let ecl = Ast_convenience.evar "Bitstring.Buffer.create" in
-  let ini = Ast_convenience.app ecl [ (Ast_convenience.unit ()) ] in
-  let res = mkpvar ~loc sym in
-  [%expr let [%p res] = [%e ini] in [%e seq]][@metaloc loc]
+  let post =
+    [%expr
+      let _res = [%e rep] in
+      if (Bitstring.bitstring_length _res) = [%e len]
+      then _res else raise Exit]
+      [@metaloc loc]
+  in
+  let seq = List.fold_right
+      ~f:(fun fld acc -> [%expr [%e (gen_constructor ~loc sym fld)]; [%e acc]])
+      ~init:post
+      fields
+  in
+  [%expr
+    let [%p (pvar ~loc sym)] = Bitstring.Buffer.create () in
+    [%e seq]]
+    [@metaloc loc]
 ;;
 
 let parse_assignment_behavior ~loc sym value =
@@ -953,11 +949,10 @@ let parse_assignment_behavior ~loc sym value =
 
 let gen_constructor_expr ~loc value =
   let sym = mksym "constructor" in
-  let pat = mkpvar ~loc sym in
-  let idt = Ast_convenience.evar sym in
-  let fnc = Exp.apply ~loc idt [ (Nolabel, (Ast_convenience.unit ())) ] in
+  let exp = evar ~loc sym
+  and pat = pvar ~loc sym in
   let beh = parse_assignment_behavior ~loc sym value in
-  [%expr let [%p pat] = fun () -> [%e beh] in [%e fnc]]
+  [%expr let [%p pat] = fun () -> [%e beh] in [%e exp] ()]
 ;;
 
 (*
@@ -968,15 +963,15 @@ let gen_constructor_expr ~loc value =
 let transform_single_let ~mapper ~loc ast expr =
   match ast.pvb_pat.ppat_desc, ast.pvb_expr.pexp_desc with
   | Parsetree.Ppat_var (s), Pexp_constant (Pconst_string (value, _)) ->
-    let pat = mkpvar ~loc s.txt in
-    let extension = {Asttypes.txt = "bitstring"; loc} in
+    let pat = pvar ~loc s.txt in
+    let extension = { Asttypes.txt = "bitstring"; loc } in
     let payload =
-      Const.string value
-      |> Exp.constant ~loc
-      |> Str.eval ~loc
+      Ast_helper.Const.string value
+      |> Ast_helper.Exp.constant ~loc
+      |> Ast_helper.Str.eval ~loc
     in
-    let constructor_expr = Exp.extension ~loc (extension, PStr [payload]) in
-    let expr = [%expr let [%p pat] = [%e constructor_expr] in [%e expr]] in
+    let constr = Ast_helper.Exp.extension ~loc (extension, PStr [payload]) in
+    let expr = [%expr let [%p pat] = [%e constr] in [%e expr]] in
     mapper.Ast_mapper.expr mapper expr
   | _ -> location_exn ~loc "Invalid pattern type"
 ;;
