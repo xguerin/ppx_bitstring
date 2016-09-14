@@ -507,36 +507,38 @@ let gen_int_extractor ~loc (dat, off, len) (l, q) edat eoff elen =
     (* 8-bit type *)
     | Some (size), Some (sign), Some (_) when size >= 2 && size <= 8 ->
       let ex = sprintf "Bitstring.extract_char_%s" (Sign.to_string sign) in
-      let op = sprintf "%s %s %s %s %d" ex dat off len size in
-      parse_expr (Location.mkloc op loc)
+      [%expr
+        [%e evar ~loc ex] [%e edat] [%e eoff] [%e elen] [%e int ~loc size]]
+        [@metaloc loc]
     (* 16|32|64-bit type *)
     | Some (size), Some (sign), Some (Endian.Referred r) ->
-      let ss = Sign.to_string sign and it = get_inttype ~loc size in
+      let ss = Sign.to_string sign
+      and it = get_inttype ~loc size in
       let ex = sprintf "Bitstring.extract_%s_ee_%s" it ss in
-      let ee = Pprintast.string_of_expression r in
-      let op = sprintf "%s (%s) %s %s %s %d" ex ee dat off len size in
-      parse_expr (Location.mkloc op loc)
+      [%expr
+        [%e evar ~loc ex] ([%e r]) [%e edat] [%e eoff] [%e elen] [%e int ~loc size]]
+        [@metaloc loc]
     | Some (size), Some (sign), Some (endian) ->
       let tp = get_inttype ~loc size in
       let en = Endian.to_string endian in
       let sn = Sign.to_string sign in
       let ex = sprintf "Bitstring.extract_%s_%s_%s" tp en sn in
-      let op = sprintf "%s %s %s %s %d" ex dat off len size in
-      parse_expr (Location.mkloc op loc)
+      [%expr
+        [%e evar ~loc ex] [%e edat] [%e eoff] [%e elen] [%e int ~loc size]]
+        [@metaloc loc]
     (* Variable size *)
     | None, Some (sign), Some (Endian.Referred r) ->
       let ss = Sign.to_string sign in
       let ex = sprintf "Bitstring.extract_int64_ee_%s" ss in
-      let ee = Pprintast.string_of_expression r in
-      let ln = Pprintast.string_of_expression l in
-      let op = sprintf "%s (%s) %s %s %s (%s)" ex ee dat off len ln in
-      parse_expr (Location.mkloc op loc)
+      [%expr
+        [%e evar ~loc ex] ([%e r]) [%e edat] [%e eoff] [%e elen] ([%e l])]
+        [@metaloc loc]
     | None, Some (sign), Some (endian) ->
       let es = Endian.to_string endian and ss = Sign.to_string sign in
       let ex = sprintf "Bitstring.extract_int64_%s_%s" es ss in
-      let ln = Pprintast.string_of_expression l in
-      let op = sprintf "%s %s %s %s (%s)" ex dat off len ln in
-      parse_expr (Location.mkloc op loc)
+      [%expr
+        [%e evar ~loc ex] [%e edat] [%e eoff] [%e elen] ([%e l])]
+        [@metaloc loc]
     (* Invalid type *)
     | _, _, _ ->
       location_exn ~loc "Invalid type"
