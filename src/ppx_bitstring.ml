@@ -731,6 +731,27 @@ and gen_fields ~loc org_off (dat, off, len) beh fields =
   | _ -> location_exn ~loc "Wrong pattern type in bitmatch case"
 ;;
 
+let is_field_size_open_ended = function
+  | Some (l) ->
+    begin match (evaluate_expr l) with
+      | Some (-1) -> true
+      | _         -> false
+    end
+  | None -> false
+
+let check_for_open_endedness fields =
+  List.fold_left
+    ~init:false
+    ~f:(fun agg (p, l, _) ->
+        let oe = is_field_size_open_ended l in
+        if agg || (oe && agg) then
+          location_exn ~loc:p.ppat_loc "Pattern is already open-ended"
+        else oe)
+    fields
+  |> ignore;
+  fields
+;;
+
 let gen_case ~mapper org_off res (dat, off, len) case =
   let loc = case.pc_lhs.ppat_loc in
   match case.pc_lhs.ppat_desc with
@@ -741,15 +762,16 @@ let gen_case ~mapper org_off res (dat, off, len) case =
     in split_string ~on:';' value
     |> split_loc ~loc
     |> List.map ~f:(fun e -> parse_match_fields e)
+    |> check_for_open_endedness
     |> gen_fields ~loc org_off (dat, off, len) beh
   | _ ->
     location_exn ~loc "Wrong pattern type"
 ;;
 
 let rec gen_cases_sequence ~loc = function
-  | [] -> location_exn ~loc "Empty case list"
-  | [hd] -> hd
-  | hd :: tl -> Ast_helper.Exp.sequence ~loc hd (gen_cases_sequence ~loc tl)
+  | []        -> location_exn ~loc "Empty case list"
+  | [hd]      -> hd
+  | hd :: tl  -> [%expr [%e hd]; [%e gen_cases_sequence ~loc tl]][@metaloc loc]
 ;;
 
 let gen_cases ~mapper ~loc ident cases =
