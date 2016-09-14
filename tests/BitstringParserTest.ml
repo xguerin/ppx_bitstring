@@ -162,13 +162,48 @@ let pcap_test context =
   | {| _ |} -> failwith "Not a valid PCAP file"
 
 (*
+ * Function-style parser test
+ *)
+
+let function_parser = function%bitstring
+  | {|  1       : 3
+      ; 2       : 4
+      ; "hello" : 40 : string
+    |} ->
+    assert_bool "Bitstring is valid" true
+  | {| _ |} ->
+    assert_bool "Invlaid bitstring" false
+;;
+
+let function_parser_test context =
+  [%bitstring {| 1 : 3; 2 : 4; "hello" : 40 : string |}]
+  |> function_parser
+
+(*
+ * Function-style parser test, inline
+ *)
+
+let function_parser_inline_test context =
+  [%bitstring {| 1 : 3; 2 : 4; "hello" : 40 : string |}]
+  |> function%bitstring
+  | {|  1       : 3
+      ; 2       : 4
+      ; "hello" : 40 : string
+    |} ->
+    assert_bool "Bitstring is valid" true
+  | {| _ |} ->
+    assert_bool "Invlaid bitstring" false
+
+(*
  * Test suite definition
  *)
 
 let suite = "BitstringParserTest" >::: [
-    "ext3"  >:: ext3_test;
-    "gif"   >:: gif_test;
-    "pcap"  >:: pcap_test
+    "ext3"            >:: ext3_test;
+    "gif"             >:: gif_test;
+    "pcap"            >:: pcap_test;
+    "function"        >:: function_parser_test;
+    "function_inline" >:: function_parser_inline_test
   ]
 
 let () = run_test_tt_main suite
