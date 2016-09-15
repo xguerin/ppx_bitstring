@@ -489,14 +489,14 @@ let check_field_len ~loc (l, q) =
   | None -> location_exn ~loc "No type to check"
 ;;
 
-let get_inttype ~loc = function
-  | v when v > 8  && v <= 16 -> "int"
+let get_inttype ~loc ~fastpath = function
+  | v when v > 8  && v <= 16 -> if fastpath then "int16" else "int"
   | v when v > 16 && v <= 32 -> "int32"
   | v when v > 32 && v <= 64 -> "int64"
   | _ -> location_exn ~loc "Invalid integer size"
 ;;
 
-let gen_int_extractor ~loc (dat, off, len) (l, q) edat eoff elen =
+let gen_int_extractor ~loc (edat, eoff, elen) (l, q) =
   let open Qualifiers in
   match (evaluate_expr l), q.sign, q.endian with
     (* 1-bit type *)
@@ -506,25 +506,34 @@ let gen_int_extractor ~loc (dat, off, len) (l, q) edat eoff elen =
         [@metaloc loc]
     (* 8-bit type *)
     | Some (size), Some (sign), Some (_) when size >= 2 && size <= 8 ->
-      let ex = sprintf "Bitstring.extract_char_%s" (Sign.to_string sign) in
+      let ex = sprintf "Bitstring.extract_char_%s" (Sign.to_string sign)
+      in
       [%expr
         [%e evar ~loc ex] [%e edat] [%e eoff] [%e elen] [%e int ~loc size]]
         [@metaloc loc]
-    (* 16|32|64-bit type *)
+    (* 16|32|64-bit type with referred endianness *)
     | Some (size), Some (sign), Some (Endian.Referred r) ->
       let ss = Sign.to_string sign
-      and it = get_inttype ~loc size in
-      let ex = sprintf "Bitstring.extract_%s_ee_%s" it ss in
+      and it = get_inttype ~loc ~fastpath:false size in
+      let ex = sprintf "Bitstring.extract_%s_ee_%s" it ss
+      in
       [%expr
         [%e evar ~loc ex] ([%e r]) [%e edat] [%e eoff] [%e elen] [%e int ~loc size]]
         [@metaloc loc]
+    (* 16|32|64-bit type with immediate endianness *)
     | Some (size), Some (sign), Some (endian) ->
-      let tp = get_inttype ~loc size in
-      let en = Endian.to_string endian in
-      let sn = Sign.to_string sign in
-      let ex = sprintf "Bitstring.extract_%s_%s_%s" tp en sn in
+      let sn = Sign.to_string sign
+      and it = get_inttype ~loc ~fastpath:false size
+      and ft = get_inttype ~loc ~fastpath:true size
+      and en = Endian.to_string endian in
+      let ex = sprintf "Bitstring.extract_%s_%s_%s" it en sn
+      and fp = sprintf "Bitstring.extract_fastpath_%s_%s_%s" ft en sn
+      in
       [%expr
-        [%e evar ~loc ex] [%e edat] [%e eoff] [%e elen] [%e int ~loc size]]
+        if ([%e eoff] land 7) = 0 then
+          [%e evar ~loc fp] [%e edat] ([%e eoff] lsr 3)
+        else
+          [%e evar ~loc ex] [%e edat] [%e eoff] [%e elen] [%e int ~loc size]]
         [@metaloc loc]
     (* Variable size *)
     | None, Some (sign), Some (Endian.Referred r) ->
@@ -564,7 +573,7 @@ let gen_extractor ~loc (dat, off, len) (l, q) =
       (Bitstring.string_of_bitstring ([%e edat], [%e eoff], [%e l]))]
       [@metaloc loc]
   | Some (Type.Int) ->
-    gen_int_extractor ~loc (dat, off, len) (l, q) edat eoff elen
+    gen_int_extractor ~loc (edat, eoff, elen) (l, q)
   | _ ->
     location_exn ~loc "Invalid type"
 ;;
@@ -875,11 +884,12 @@ let gen_constructor_int ~loc sym (l, s, q) =
       (ex, l, int ~loc size)
     (* 16|32|64-bit type *)
     | Some (size), Some (sign), Some (Endian.Referred r) ->
-      let ss = Sign.to_string sign and it = get_inttype ~loc size in
+      let ss = Sign.to_string sign
+      and it = get_inttype ~loc ~fastpath:false size in
       let ex = sprintf "Bitstring.construct_%s_ee_%s" it ss in
       (ex, l, int ~loc size)
     | Some (size), Some (sign), Some (endian) ->
-      let tp = get_inttype ~loc size
+      let tp = get_inttype ~loc ~fastpath:false size
       and en = Endian.to_string endian
       and sn = Sign.to_string sign in
       let ex = sprintf "Bitstring.construct_%s_%s_%s" tp en sn in
