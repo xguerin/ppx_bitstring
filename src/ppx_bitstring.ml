@@ -24,15 +24,6 @@ open Longident
 open Parsetree
 open Printf
 
-(* Symbol creation *)
-
-let mksym =
-  let i = ref 1000 in
-  fun name ->
-    incr i; let i = !i in
-    sprintf "__ppxbitstring_%s_%d" name i
-;;
-
 (* Type definition *)
 
 module Entity = struct
@@ -41,6 +32,13 @@ module Entity = struct
     exp : Parsetree.expression;
     pat : Parsetree.pattern
   }
+
+  let mksym =
+    let i = ref 1000 in
+    fun name ->
+      incr i; let i = !i in
+      sprintf "__ppxbitstring_%s_%d" name i
+  ;;
 
   let make ~loc v =
     let txt = mksym v in
@@ -846,11 +844,10 @@ let gen_cases ~mapper ~loc ident cases =
 ;;
 
 let gen_function ~mapper ~loc cases =
-  let casN = mksym "case" in
-  let pcasN = pvar ~loc casN
-  and ecasN = evar ~loc casN in
+  let open Entity in
+  let cas = Entity.make ~loc "case" in
   [%expr
-    (fun [%p pcasN] -> [%e (gen_cases ~mapper ~loc ecasN cases)])]
+    (fun [%p cas.pat] -> [%e (gen_cases ~mapper ~loc cas.exp cases)])]
     [@metaloc loc]
 
 (* Constructor generators *)
@@ -865,33 +862,34 @@ let gen_constructor_exn ~loc =
     [@metaloc loc]
 ;;
 
-let gen_constructor_bitstring ~loc sym l =
+let gen_constructor_bitstring ~loc sym (l, _, _ ) =
   [%expr
-    Bitstring.construct_bitstring [%e evar ~loc sym] [%e l]]
+    Bitstring.construct_bitstring [%e sym.Entity.exp] [%e l]]
     [@metaloc loc]
 ;;
 
-let gen_constructor_string ~loc sym l =
+let gen_constructor_string ~loc sym (l, _, _) =
   [%expr
-    Bitstring.construct_string [%e evar ~loc sym] [%e l]]
+    Bitstring.construct_string [%e sym.Entity.exp] [%e l]]
     [@metaloc loc]
 ;;
 
-let get_1_bit_constr_value ~loc l =
+let get_1_bit_constr_value ~loc (l, _, _) =
   match (evaluate_expr l) with
     | Some (1)        -> [%expr true][@metaloc loc]
     | Some (0)        -> [%expr false][@metaloc loc]
     | Some (_) | None -> l
 ;;
 
-let gen_constructor_int ~loc sym (l, s, q) =
+let gen_constructor_int ~loc sym fld =
   let open Qualifiers in
+  let (l, s, q) = fld in
   let eexc = gen_constructor_exn ~loc
-  and esym = evar ~loc sym in
+  and esym = sym.Entity.exp in
   let (fname, vl, sz) = match (evaluate_expr s), q.sign, q.endian with
     (* 1-bit type *)
     | Some (size), Some (_), Some (_) when size = 1 ->
-      ("Bitstring.construct_bit", get_1_bit_constr_value ~loc l, [%expr 1])
+      ("Bitstring.construct_bit", get_1_bit_constr_value ~loc fld, [%expr 1])
     (* 8-bit type *)
     | Some (size), Some (sign), Some (_) when size >= 2 && size <= 8 ->
       let sn = Sign.to_string sign in
@@ -918,35 +916,40 @@ let gen_constructor_int ~loc sym (l, s, q) =
     [@metaloc loc]
 ;;
 
-let gen_constructor_complete ~loc sym (l, s, q) =
+let gen_constructor_complete ~loc sym fld =
+  let (_, _, q) = fld in
   match q.Qualifiers.value_type with
-  | Some (Type.Bitstring) -> gen_constructor_bitstring ~loc sym l
-  | Some (Type.String)    -> gen_constructor_string ~loc sym l
-  | Some (Type.Int)       -> gen_constructor_int ~loc sym (l, s, q)
+  | Some (Type.Bitstring) -> gen_constructor_bitstring ~loc sym fld
+  | Some (Type.String)    -> gen_constructor_string ~loc sym fld
+  | Some (Type.Int)       -> gen_constructor_int ~loc sym fld
   | _                     -> location_exn ~loc "Invalid type"
 ;;
 
 let gen_constructor ~loc sym = function
-  | (l, Some (s), Some (q)) -> gen_constructor_complete ~loc sym (l, s, q)
+  | (f, Some (s), Some (q)) -> gen_constructor_complete ~loc sym (f, s, q)
   | _ -> location_exn ~loc "Invalid field format"
 ;;
 
 let gen_assignment_size_of_sized_field ~loc (f, s, q) =
   match (evaluate_expr s), option_bind q (fun q -> q.Qualifiers.value_type) with
-  | Some (-1),  Some (Type.String) -> [%expr (String.length [%e f] * 8)]
-  | Some (v),   Some (Type.String) when v > 0 && (v mod 8) = 0 -> s
-  | Some (_),   Some (Type.String) ->
+  (* Deal with String type *)
+  | Some (-1), Some (Type.String) -> [%expr (String.length [%e f] * 8)]
+  | Some (v),  Some (Type.String) when v > 0 && (v mod 8) = 0 -> s
+  | Some (_),  Some (Type.String) ->
       location_exn ~loc "Length of string must be > 0 and multiple of 8, or the special value -1"
+  (* Deal with Bitstring type *)
   | None, Some (Type.String) -> s
-  | Some (-1),  Some (Type.Bitstring) -> [%expr (Bitstring.bitstring_length [%e f])]
-  | Some (v),   Some (Type.Bitstring) when v > 0 -> s
-  | Some (_),   Some (Type.Bitstring) ->
+  | Some (-1), Some (Type.Bitstring) -> [%expr (Bitstring.bitstring_length [%e f])]
+  | Some (v),  Some (Type.Bitstring) when v > 0 -> s
+  | None,      Some (Type.Bitstring) -> s
+  | Some (_),  Some (Type.Bitstring) ->
       location_exn ~loc "Length of bitstring must be >= 0 or the special value -1"
-  | None,       Some (Type.Bitstring) -> s
-  | Some (v),   _ when v > 0 -> s
-  | Some (v),   _ ->
+  (* Deal with other types *)
+  | Some (v), _ when v > 0 -> s
+  | Some (v), _ ->
       location_exn ~loc "Negative or null field size in constructor"
-  | None,       _ ->
+  (* Unknown field size *)
+  | None, _ ->
     location_exn ~loc "Invalid field size in constructor"
 ;;
 
@@ -965,7 +968,7 @@ let rec gen_assignment_size ~loc = function
 
 let gen_assignment_behavior ~loc sym fields =
   let size = gen_assignment_size ~loc fields in
-  let res = evar ~loc sym in
+  let res = sym.Entity.exp in
   let rep = [%expr Bitstring.Buffer.contents [%e res]][@metaloc loc] in
   let len = match (evaluate_expr size) with
     | Some (v)  -> int v
@@ -984,24 +987,23 @@ let gen_assignment_behavior ~loc sym fields =
       fields
   in
   [%expr
-    let [%p (pvar ~loc sym)] = Bitstring.Buffer.create () in
+    let [%p sym.Entity.pat] = Bitstring.Buffer.create () in
     [%e seq]]
     [@metaloc loc]
 ;;
 
 let parse_assignment_behavior ~loc sym value =
-  (split_string ~on:';' value)
+  split_string ~on:';' value
   |> split_loc ~loc
   |> List.map ~f:(fun flds -> parse_const_fields flds)
   |> gen_assignment_behavior ~loc sym
 ;;
 
 let gen_constructor_expr ~loc value =
-  let sym = mksym "constructor" in
-  let exp = evar ~loc sym
-  and pat = pvar ~loc sym in
+  let open Entity in
+  let sym = Entity.make ~loc "constructor" in
   let beh = parse_assignment_behavior ~loc sym value in
-  [%expr let [%p pat] = fun () -> [%e beh] in [%e exp] ()]
+  [%expr let [%p sym.pat] = fun () -> [%e beh] in [%e sym.exp] ()]
 ;;
 
 (*
