@@ -1,6 +1,6 @@
 true: predicate(custom_ppx)
 <src/*>: linkall
-<as_ppx/ppx_bitstring.{byte,native}>: predicate(ppx_driver)
+<as_ppx/ppx.{byte,native}>: predicate(ppx_driver)
 # OASIS_START
 # DO NOT EDIT (digest: ed2ded880eb3847f3d6928cee1e499c5)
 # Ignore VCS directories, you can use the same kind of rule outside

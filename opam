@@ -16,13 +16,14 @@ install: [
   ["ocaml" "setup.ml" "-install"]
 ]
 depends: [
-  "bitstring"     {build}
-  "ocamlbuild"    {build}
-  "ocamlfind"     {build}
-  "ppx_tools"     {build}
-  "ppx_driver"    {build}
-  "ppx_core"      {build}
-  "ounit"         {build}
+  "bitstring"      {build}
+  "ocamlbuild"     {build}
+  "ocamlfind"      {build}
+  "ppx_tools"      {build}
+  "ppx_driver"     {build}
+  "ppx_core"       {build}
+  "ounit"          {build}
+  "js-build-tools" {build}
 ]
 remove: ["ocamlfind" "remove" "ppx_bitstring"]
 available: ocaml-version >= "4.03"
