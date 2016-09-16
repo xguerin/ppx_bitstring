@@ -154,6 +154,24 @@ module Qualifiers = struct
   ;;
 end
 
+module MatchField = struct
+  type bitlen =
+    (Parsetree.expression * int option)
+  ;;
+
+  type tuple = {
+    pat : Parsetree.pattern;
+    len : bitlen;
+    qls : Qualifiers.t;
+    opt : bool
+  }
+
+  type t =
+    | Any of Parsetree.pattern
+    | Tuple of tuple
+  ;;
+end
+
 (* Exception *)
 
 let location_exn ~loc msg =
@@ -455,19 +473,26 @@ let rec evaluate_expr = function
 (* Parsing fields *)
 
 let parse_match_fields str =
+  let open MatchField in
   split_string ~on:':' str.txt
   |> split_loc ~loc:str.loc
   |> function
   | [ { txt = "_" ; loc } as pat ] ->
-    (parse_pattern pat, (None, None), None)
-  | [ pat; len ] ->
-    let q = Some Qualifiers.default
-    and l = parse_expr len in
-    (parse_pattern pat, (Some (l), evaluate_expr l), q)
-  | [ pat; len; quals ] ->
-    let q = Some (Qualifiers.set_defaults (parse_quals quals))
-    and l = parse_expr len in
-    (parse_pattern pat, (Some (l), evaluate_expr l), q)
+    MatchField.Any (parse_pattern pat)
+  | [ spat; slen ] ->
+    let qls = Qualifiers.default
+    and eln = parse_expr slen
+    and pat = parse_pattern spat
+    and opt = false in
+    let len = (eln, evaluate_expr eln) in
+    MatchField.Tuple { pat; len; qls; opt }
+  | [ spat; slen; sqls ] ->
+    let qls = Qualifiers.set_defaults (parse_quals sqls)
+    and eln = parse_expr slen
+    and pat = parse_pattern spat
+    and opt = false in
+    let len = (eln, evaluate_expr eln) in
+    MatchField.Tuple { pat; len; qls; opt }
   | [ stmt ] ->
     let pat_str = StdLabels.Bytes.to_string stmt.txt in
     location_exn ~loc:stmt.loc ("Invalid statement: '" ^ pat_str ^ "'")
@@ -505,8 +530,9 @@ let parse_const_fields str =
 
 (* Match generators *)
 
-let check_field_len ~loc ((l, v), q) =
-  match v, q.Qualifiers.value_type with
+let check_field_len ~loc fld =
+  let (l, v) = fld.MatchField.len in
+  match v, fld.MatchField.qls.Qualifiers.value_type with
   | Some (n), Some (Type.String) ->
     if n < -1 || (n > 0 && (n mod 8) <> 0) then
       location_exn ~loc "Length of string must be > 0 and multiple of 8, or the special value -1"
@@ -528,14 +554,49 @@ let get_inttype ~loc ~fastpath = function
   | _ -> location_exn ~loc "Invalid integer size"
 ;;
 
-let gen_int_extractor ~loc nxt ((l, v), q) =
-  let open Qualifiers
+let gen_int_extractor_static ~loc nxt size sign endian =
+  let edat = nxt.Context.dat.Entity.exp
+  and eoff = nxt.Context.off.Entity.exp
+  in
+  let sn = Sign.to_string sign
+  and ft = get_inttype ~loc ~fastpath:true size
+  and en = Endian.to_string endian in
+  let fp = sprintf "Bitstring.extract_fastpath_%s_%s_%s" ft en sn
+  in
+  [%expr
+    [%e evar ~loc fp] [%e edat] ([%e eoff] lsr 3)]
+    [@metaloc loc]
+;;
+
+let gen_int_extractor_dynamic ~loc nxt size sign endian =
+  let edat = nxt.Context.dat.Entity.exp
+  and eoff = nxt.Context.off.Entity.exp
+  and elen = nxt.Context.len.Entity.exp
+  in
+  let sn = Sign.to_string sign
+  and it = get_inttype ~loc ~fastpath:false size
+  and ft = get_inttype ~loc ~fastpath:true size
+  and en = Endian.to_string endian in
+  let ex = sprintf "Bitstring.extract_%s_%s_%s" it en sn
+  and fp = sprintf "Bitstring.extract_fastpath_%s_%s_%s" ft en sn
+  in
+  [%expr
+    if ([%e eoff] land 7) = 0 then
+      [%e evar ~loc fp] [%e edat] ([%e eoff] lsr 3)
+    else
+      [%e evar ~loc ex] [%e edat] [%e eoff] [%e elen] [%e int ~loc size]]
+    [@metaloc loc]
+;;
+
+let gen_int_extractor ~loc nxt fld =
+  let open Qualifiers in
+  let (l, v) = fld.MatchField.len
   in
   let edat = nxt.Context.dat.Entity.exp
   and eoff = nxt.Context.off.Entity.exp
   and elen = nxt.Context.len.Entity.exp
   in
-  match v, q.sign, q.endian with
+  match v, fld.MatchField.qls.sign, fld.MatchField.qls.endian with
     (* 1-bit type *)
     | Some (size), Some (_), Some (_) when size = 1 ->
       [%expr
@@ -559,19 +620,10 @@ let gen_int_extractor ~loc nxt ((l, v), q) =
         [@metaloc loc]
     (* 16|32|64-bit type with immediate endianness *)
     | Some (size), Some (sign), Some (endian) ->
-      let sn = Sign.to_string sign
-      and it = get_inttype ~loc ~fastpath:false size
-      and ft = get_inttype ~loc ~fastpath:true size
-      and en = Endian.to_string endian in
-      let ex = sprintf "Bitstring.extract_%s_%s_%s" it en sn
-      and fp = sprintf "Bitstring.extract_fastpath_%s_%s_%s" ft en sn
-      in
-      [%expr
-        if ([%e eoff] land 7) = 0 then
-          [%e evar ~loc fp] [%e edat] ([%e eoff] lsr 3)
-        else
-          [%e evar ~loc ex] [%e edat] [%e eoff] [%e elen] [%e int ~loc size]]
-        [@metaloc loc]
+      if fld.MatchField.opt then
+        gen_int_extractor_static ~loc nxt size sign endian
+      else
+        gen_int_extractor_dynamic ~loc nxt size sign endian
     (* Variable size *)
     | None, Some (sign), Some (Endian.Referred r) ->
       let ss = Sign.to_string sign in
@@ -590,14 +642,15 @@ let gen_int_extractor ~loc nxt ((l, v), q) =
       location_exn ~loc "Invalid type"
 ;;
 
-let gen_extractor ~loc nxt ((l, v), q) =
-  let open Qualifiers
+let gen_extractor ~loc nxt fld =
+  let open Qualifiers in
+  let (l, v) = fld.MatchField.len
   in
   let edat = nxt.Context.dat.Entity.exp
   and eoff = nxt.Context.off.Entity.exp
   and elen = nxt.Context.len.Entity.exp
   in
-  match q.value_type with
+  match fld.MatchField.qls.value_type with
   | Some (Type.Bitstring) -> begin
       match v with
       | Some (-1) ->
@@ -610,26 +663,27 @@ let gen_extractor ~loc nxt ((l, v), q) =
       (Bitstring.string_of_bitstring ([%e edat], [%e eoff], [%e l]))]
       [@metaloc loc]
   | Some (Type.Int) ->
-    gen_int_extractor ~loc nxt ((l, v), q)
+    gen_int_extractor ~loc nxt fld
   | _ ->
     location_exn ~loc "Invalid type"
 ;;
 
-let gen_value ~loc nxt (l, q) =
+let gen_value ~loc nxt fld =
   let open Qualifiers in
-  match q.bind, q.map  with
+  match fld.MatchField.qls.bind, fld.MatchField.qls.map  with
   | Some b, None  -> b
   | None, Some m  ->
     [%expr
-      [%e m] [%e (gen_extractor ~loc nxt (l, q))]]
+      [%e m] [%e (gen_extractor ~loc nxt fld)]]
       [@metaloc loc]
   | _, _ ->
-    gen_extractor ~loc nxt (l, q)
+    gen_extractor ~loc nxt fld
 ;;
 
-let rec gen_next ~loc cur nxt (p, (l, v), q) beh fields =
+let rec gen_next ~loc cur nxt fld beh fields =
   let open Entity in
   let open Context in
+  let (l, v) = fld.MatchField.len in
   match v with
   | Some (-1) ->
     [%expr
@@ -657,47 +711,50 @@ and gen_match_check ~loc = function
   | Some chk  -> chk
   | None      -> constr ~loc "true" []
 
-and gen_match ~loc cur nxt (p, (l, v), q) beh fields =
+and gen_match ~loc cur nxt fld beh fields =
   let open Entity in
   let open Context in
   let open Qualifiers in
   let value = Entity.make ~loc "val"
+  and (l, _) = fld.MatchField.len
   in
-  gen_match_check ~loc q.check
+  gen_match_check ~loc fld.MatchField.qls.check
   |> fun g ->
   [%expr
     begin match [%e value.exp] with
-      | [%p p] when [%e g] ->
+      | [%p fld.MatchField.pat] when [%e g] ->
         [%e (gen_fields ~loc cur nxt beh fields)]
       | _ -> ()
     end]
     [@metaloc loc]
   |> fun m ->
   [%expr
-    let [%p value.pat]    = [%e (gen_value ~loc nxt ((l, v), q))]
+    let [%p value.pat]    = [%e (gen_value ~loc nxt fld)]
     and [%p nxt.off.pat]  = [%e nxt.off.exp] + [%e l]
     and [%p nxt.len.pat]  = [%e nxt.len.exp] - [%e l] in [%e m]]
     [@metaloc loc]
 
-and gen_offset_saver ~loc cur nxt (p, q) beh =
+and gen_offset_saver ~loc cur nxt fld beh =
   let open Context in
   let open Entity in
   let open Qualifiers in
-  match q.save_offset_to with
+  match fld.MatchField.qls.save_offset_to with
   | Some { pexp_desc = Pexp_ident ({ txt; loc = eloc }) } ->
     let ptxt = pvar ~loc:eloc (Longident.last txt) in
     [%expr
-      let [%p (ptxt)] = [%e nxt.off.exp] - [%e cur.off.exp] in [%e beh]]
+      let [%p ptxt] = [%e nxt.off.exp] - [%e cur.off.exp] in [%e beh]]
       [@metaloc eloc]
   | Some _ | None -> beh
 
-and gen_unbound_string ~loc cur nxt (l, q) beh fields p =
+and gen_unbound_string ~loc cur nxt fld beh fields =
   let open Entity in
   let open Context in
+  let p = fld.MatchField.pat
+  in
   match p with
   | { ppat_desc = Ppat_var(_) } ->
     [%expr
-      let [%p p] = [%e (gen_value ~loc nxt (l, q))] in
+      let [%p p] = [%e (gen_value ~loc nxt fld)] in
       [%e (gen_next_all ~loc cur nxt beh fields)]]
       [@metaloc loc]
   | [%pat? _ ] ->
@@ -707,71 +764,76 @@ and gen_unbound_string ~loc cur nxt (l, q) beh fields p =
   | _ ->
     location_exn ~loc "Unbound string or bitstring can only be assigned to a variable or skipped"
 
-and gen_bound_bitstring ~loc cur nxt ((l, v), q) beh fields p =
+and gen_bound_bitstring ~loc cur nxt fld beh fields =
   let open Entity in
   let open Context in
+  let p = fld.MatchField.pat
+  and (l, _) = fld.MatchField.len
+  in
   match p with
   | { ppat_desc = Ppat_var(_) } ->
     [%expr
       if [%e nxt.len.exp] >= [%e l] then
-        let [%p p] = [%e (gen_value ~loc nxt ((l, v), q))] in
-        [%e (gen_next ~loc cur nxt (p, (l, v), q) beh fields)]
+        let [%p p] = [%e (gen_value ~loc nxt fld)] in
+        [%e (gen_next ~loc cur nxt fld beh fields)]
       else ()]
       [@metaloc loc]
   | [%pat? _ ] ->
     [%expr
       if [%e nxt.len.exp] >= [%e l] then
-        [%e (gen_next ~loc cur nxt (p, (l, v), q) beh fields)]
+        [%e (gen_next ~loc cur nxt fld beh fields)]
       else ()]
       [@metaloc loc]
   | _ ->
     location_exn ~loc "Bound bitstring can only be assigned to variables or skipped"
 
-and gen_bound_string ~loc cur nxt ((l, v), q) beh fields p =
+and gen_bound_string ~loc cur nxt fld beh fields =
   let open Entity in
   let open Context in
+  let (l, _) = fld.MatchField.len
+  in
   [%expr
     if [%e nxt.len.exp] >= [%e l] then
-      [%e (gen_match ~loc cur nxt (p, (l, v), q) beh fields)]
+      [%e (gen_match ~loc cur nxt fld beh fields)]
     else ()]
     [@metaloc loc]
 
-and gen_bound_int ~loc cur nxt ((l, v), q) beh fields p =
+and gen_bound_int ~loc cur nxt fld beh fields =
   let open Entity in
   let open Context in
+  let (l, _) = fld.MatchField.len
+  in
   [%expr
     if [%e l] >= 1 && [%e l] <= 64 && [%e nxt.len.exp] >= [%e l] then
-      [%e (gen_match ~loc cur nxt (p, (l, v), q) beh fields)]
+      [%e (gen_match ~loc cur nxt fld beh fields)]
     else ()]
     [@metaloc loc]
 
-and gen_fields_with_quals_by_type ~loc cur nxt (p, l, q) beh fields =
+and gen_fields_with_quals_by_type ~loc cur nxt fld beh fields =
   let open Qualifiers in
-  match check_field_len ~loc (l, q), q.value_type with
+  match check_field_len ~loc fld, fld.MatchField.qls.value_type with
   | Some (-1), Some (Type.Bitstring | Type.String) ->
-    gen_unbound_string ~loc cur nxt (l, q) beh fields p
+    gen_unbound_string ~loc cur nxt fld beh fields
   | (Some (_) | None), Some (Type.Bitstring) ->
-    gen_bound_bitstring ~loc cur nxt (l, q) beh fields p
+    gen_bound_bitstring ~loc cur nxt fld beh fields
   | (Some (_) | None), Some (Type.String) ->
-    gen_bound_string ~loc cur nxt (l, q) beh fields p
+    gen_bound_string ~loc cur nxt fld beh fields
   | Some (_), Some (Type.Int)
   | None, Some (Type.Int) ->
-    gen_bound_int ~loc cur nxt (l, q) beh fields p
+    gen_bound_int ~loc cur nxt fld beh fields
   | _, _ ->
     location_exn ~loc "No type to generate"
 
-and gen_fields_with_quals ~loc cur nxt (p, l, q) beh fields =
-  gen_fields_with_quals_by_type ~loc cur nxt (p, l, q) beh fields
-  |> gen_offset_saver ~loc cur nxt (p, q)
+and gen_fields_with_quals ~loc cur nxt fld beh fields =
+  gen_fields_with_quals_by_type ~loc cur nxt fld beh fields
+  |> gen_offset_saver ~loc cur nxt fld
 
 and gen_fields ~loc cur nxt beh fields =
   let open Qualifiers in
   match fields with
   | [] -> beh
-  | (p, (None, _), None) :: tl -> beh
-  | (p, (Some l, v), Some q) :: tl ->
-    gen_fields_with_quals ~loc cur nxt (p, (l, v), q) beh tl
-  | _ -> location_exn ~loc "Wrong pattern type in bitmatch case"
+  | MatchField.Any (_) :: tl -> beh
+  | MatchField.Tuple (fld) :: tl -> gen_fields_with_quals ~loc cur nxt fld beh tl
 ;;
 
 let is_field_size_open_ended = function
@@ -779,16 +841,51 @@ let is_field_size_open_ended = function
   | _               -> false
 
 let check_for_open_endedness fields =
-  List.fold_left
-    ~init:false
-    ~f:(fun agg (p, l, _) ->
-        let oe = is_field_size_open_ended l in
-        if agg || (oe && agg) then
-          location_exn ~loc:p.ppat_loc "Pattern is already open-ended"
-        else oe)
-    fields
-  |> ignore;
-  fields
+  let check init fld =
+    let p = fld.MatchField.pat
+    and l = fld.MatchField.len in
+    let oe = is_field_size_open_ended l in
+    if init || (oe && init) then
+      location_exn ~loc:p.ppat_loc "Pattern is already open-ended"
+    else oe
+  in
+  let inspect init = function
+    | MatchField.Any (_) -> init && false
+    | MatchField.Tuple fld -> check init fld
+  in
+  let rec scan init = function
+    | [] -> ()
+    | hd :: tl -> scan (inspect init hd) tl
+  in
+  scan false fields; fields
+;;
+
+let mark_optimized_fastpath fields =
+  let open Qualifiers in
+  let open MatchField
+  in
+  let check_field off tuple =
+    match tuple with
+    | { pat; len = (l, Some (v)); qls = { value_type = Some (Type.Int) }; _ } ->
+      if (off land 7) = 0 && v > 8 && (v land 8) = 0 then
+        (Some (off + v), MatchField.Tuple { tuple with opt = true })
+      else
+        (None, MatchField.Tuple tuple)
+    | _ ->
+      (None, MatchField.Tuple tuple)
+  in
+  let check_offset_and_field offset fld =
+    match offset, fld with
+    | Some (off), MatchField.Tuple (tuple) -> check_field off tuple
+    | _, _ -> (None, fld)
+  in
+  let rec scan offset result = function
+    | [] -> result
+    | hd :: tl ->
+      let (noff, nfld) = check_offset_and_field offset hd in
+      scan noff (result @ [ nfld ]) tl
+  in
+  scan (Some 0) [] fields
 ;;
 
 let gen_case cur nxt res case =
@@ -801,6 +898,7 @@ let gen_case cur nxt res case =
     |> split_loc ~loc
     |> List.map ~f:parse_match_fields
     |> check_for_open_endedness
+    |> mark_optimized_fastpath
     |> gen_fields ~loc cur nxt beh
   | _ ->
     location_exn ~loc "Wrong pattern type"
