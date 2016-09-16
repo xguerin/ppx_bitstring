@@ -888,16 +888,15 @@ let mark_optimized_fastpath fields =
   scan (Some 0) [] fields
 ;;
 
-let gen_case ~mapper cur nxt res case =
+let gen_case cur nxt res case =
   let open Entity in
   let loc = case.pc_lhs.ppat_loc in
   match case.pc_lhs.ppat_desc with
   | Ppat_constant (Pconst_string (value, _)) ->
-    let rhs = mapper.Ast_mapper.expr mapper case.pc_rhs in
-    let beh = [%expr [%e res.exp] := Some ([%e rhs]); raise Exit][@metaloc loc]
+    let beh = [%expr [%e res.exp] := Some ([%e case.pc_rhs]); raise Exit][@metaloc loc]
     in split_string ~on:';' value
     |> split_loc ~loc
-    |> List.map ~f:(fun e -> parse_match_fields e)
+    |> List.map ~f:parse_match_fields
     |> check_for_open_endedness
     |> mark_optimized_fastpath
     |> gen_fields ~loc cur nxt beh
@@ -911,7 +910,7 @@ let rec gen_cases_sequence ~loc = function
   | hd :: tl  -> [%expr [%e hd]; [%e gen_cases_sequence ~loc tl]][@metaloc loc]
 ;;
 
-let gen_cases ~mapper ~loc ident cases =
+let gen_cases ~loc ident cases =
   let open Entity in
   let open Context in
   let cur = Context.make ~loc
@@ -925,7 +924,7 @@ let gen_cases ~mapper ~loc ident cases =
   in
   List.fold_left
     ~init:[]
-    ~f:(fun acc case -> acc @ [ gen_case ~mapper cur nxt res case ])
+    ~f:(fun acc case -> acc @ [ gen_case cur nxt res case ])
     cases
   |> gen_cases_sequence ~loc
   |> fun seq ->
@@ -941,11 +940,11 @@ let gen_cases ~mapper ~loc ident cases =
     [@metaloc loc]
 ;;
 
-let gen_function ~mapper ~loc cases =
+let gen_function ~loc cases =
   let open Entity in
   let cas = Entity.make ~loc "case" in
   [%expr
-    (fun [%p cas.pat] -> [%e (gen_cases ~mapper ~loc cas.exp cases)])]
+    (fun [%p cas.pat] -> [%e (gen_cases ~loc cas.exp cases)])]
     [@metaloc loc]
 
 (* Constructor generators *)
@@ -1104,84 +1103,45 @@ let gen_constructor_expr ~loc value =
   [%expr let [%p sym.pat] = fun () -> [%e beh] in [%e sym.exp] ()]
 ;;
 
-(*
- * transform `let%bitstring foo = {| .. |} in`
- * into      `let foo = [%bitstring {| .. |}] in`
- *)
-
-let transform_single_let ~mapper ~loc ast expr =
+let transform_single_let ~loc ast expr =
   match ast.pvb_pat.ppat_desc, ast.pvb_expr.pexp_desc with
   | Parsetree.Ppat_var (s), Pexp_constant (Pconst_string (value, _)) ->
     let pat = pvar ~loc s.txt in
-    let extension = { Asttypes.txt = "bitstring"; loc } in
-    let payload =
-      Ast_helper.Const.string value
-      |> Ast_helper.Exp.constant ~loc
-      |> Ast_helper.Str.eval ~loc
-    in
-    let constr = Ast_helper.Exp.extension ~loc (extension, PStr [payload]) in
-    let expr = [%expr let [%p pat] = [%e constr] in [%e expr]] in
-    mapper.Ast_mapper.expr mapper expr
+    let constructor_expr = gen_constructor_expr loc value in
+    [%expr let [%p pat] = [%e constructor_expr] in [%e expr]]
   | _ -> location_exn ~loc "Invalid pattern type"
-;;
-
-let rec transform_let ~mapper ~loc expr = function
-  | []        -> expr
-  | hd :: tl  -> transform_let ~mapper ~loc expr tl
-                 |> transform_single_let ~mapper ~loc hd
 ;;
 
 (* Mapper *)
 
-let ppx_bitstring_expr_mapper mapper = function
-  (* Is this an extension node? *)
-  | { pexp_desc = Pexp_extension ({ txt = "bitstring"; loc }, pstr) } -> begin
-      match pstr with
-      (* Evaluation of a match expression *)
-      | PStr [{
-          pstr_desc = Pstr_eval ({
-              pexp_loc = loc;
-              pexp_desc = Pexp_match (ident, cases)
-            }, _)
-        }] -> gen_cases ~mapper ~loc ident cases
-      (* Evaluation of a function expression *)
-      | PStr [{
-          pstr_desc = Pstr_eval ({
-              pexp_loc = loc;
-              pexp_desc = Pexp_function (cases)
-            }, _)
-        }] -> gen_function ~mapper ~loc cases
-      (* Evaluation of a constructor expression *)
-      | PStr [{
-          pstr_desc = Pstr_eval ({
-              pexp_loc = loc;
-              pexp_desc = Pexp_constant (Pconst_string (value, _))
-            }, _)
-        }] -> gen_constructor_expr ~loc value
-      (* Evaluation of a let expression *)
-      | PStr [{
-          pstr_desc = Pstr_eval ({
-              pexp_loc = loc;
-              pexp_desc = Pexp_let (Asttypes.Nonrecursive, bindings, expr)
-            }, _)
-        }] -> transform_let ~mapper ~loc expr bindings
-      | PStr [{
-          pstr_desc = Pstr_eval ({
-              pexp_loc = loc;
-              pexp_desc = Pexp_let (Asttypes.Recursive, bindings, expr)
-            }, _)
-        }] -> location_exn ~loc "Recursion not supported"
-      (* Unsupported expression *)
-      | _ -> location_exn ~loc "Unsupported operator"
-    end
-  (* Delegate to the default mapper. *)
-  | x -> default_mapper.expr mapper x
+open Ppx_core.Std
 
-
-let ppx_bitstring_mapper argv = {
-  default_mapper with expr = ppx_bitstring_expr_mapper
-}
+let extension =
+  Extension.V2.declare
+    "bitstring"
+    Extension.Context.expression
+    Ast_pattern.(single_expr_payload __)
+    (fun ~loc:_ ~path:_ expr ->
+      let loc = expr.pexp_loc in
+      let expansion =
+        match expr.pexp_desc with
+        | Pexp_constant (Pconst_string (value, (_ : string option))) ->
+           gen_constructor_expr loc value
+        | Pexp_let (Nonrecursive, bindings, expr) ->
+           List.fold_right bindings ~init:expr ~f:(fun binding expr ->
+               transform_single_let ~loc binding expr)
+        | Pexp_match (ident, cases) ->
+           gen_cases ~loc ident cases
+        | Pexp_function (cases) ->
+           gen_function ~loc cases
+        | _ ->
+           location_exn ~loc
+             "'bitstring' can only be used with 'let', 'match', and as '[%bitstring]'"
+      in
+      { expansion with pexp_attributes = expr.pexp_attributes }
+    )
+;;
 
 let () =
-  register "ppx_bitstring" ppx_bitstring_mapper
+  Ppx_driver.register_transformation "bitstring" ~extensions:[extension]
 ;;

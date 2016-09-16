@@ -5,44 +5,44 @@ Version: 1.3.0
 License: ISC
 Authors: Xavier Guérin
 BuildTools: ocamlbuild
-Plugins: META (0.4), DevFiles (0.4)
+Plugins: DevFiles (0.4)
 Synopsis: PPX plugin for the OCAML OPAM bitstring package.
 Description: PPX plugin for the OCAML OPAM bitstring package.
 Homepage: https://github.com/xguerin/ppx_bitstring
+AlphaFeatures: ocamlbuild_more_args
+XOCamlbuildPluginTags: package(ppx_driver.ocamlbuild), package(js-build-tools.ocamlbuild_goodies)
+FilesAB: src/META.ab
 
 SourceRepository github
   Type:     git
   Location: https://github.com/xguerin/ppx_bitstring.git
 
 Library ppx_bitstring
-  Path:             src/
-  Modules:          Ppx_bitstring
-  XMETADescription: PPX extension for bitstring
-  XMETARequires:    bitstring
-  XMETAExtraLines:  ppx = "ppx_bitstring"
+  Path:    src/
+  Modules: Ppx_bitstring
   BuildDepends:
     compiler-libs.common,
     ppx_tools,
-    ppx_tools.metaquot
+    ppx_tools.metaquot,
+    ppx_core,
+    ppx_driver
 
-Executable ppx_bitstring
-  Path:           src
-  MainIs:         ppx_bitstring.ml
+Executable ppx
+  Path:           as_ppx
+  MainIs:         ppx.ml
   CompiledObject: best
   Install:        true
   BuildDepends:
-    compiler-libs.common,
-    threads,
-    ppx_tools,
-    ppx_tools.metaquot
+    ppx_bitstring,
+    ppx_driver
 
 Executable parser_test
   Path: tests
   MainIs: BitstringParserTest.ml
   CompiledObject: best
   Install: false
-  ByteOpt: -ppx ../_build/src/ppx_bitstring.native
-  NativeOpt: -ppx ../_build/src/ppx_bitstring.native
+  ByteOpt: -ppx ../_build/as_ppx/ppx.native
+  NativeOpt: -ppx ../_build/as_ppx/ppx.native
   BuildDepends:
     bitstring,
     ppx_bitstring,
@@ -59,8 +59,8 @@ Executable constructor_test
   MainIs: BitstringConstructorTest.ml
   CompiledObject: best
   Install: false
-  ByteOpt: -ppx ../_build/src/ppx_bitstring.native
-  NativeOpt: -ppx ../_build/src/ppx_bitstring.native
+  ByteOpt: -ppx ../_build/as_ppx/ppx.native
+  NativeOpt: -ppx ../_build/as_ppx/ppx.native
   BuildDepends:
     bitstring,
     ppx_bitstring,
@@ -77,8 +77,8 @@ Executable qualifier_test
   MainIs: BitstringQualifierTest.ml
   CompiledObject: best
   Install: false
-  ByteOpt: -ppx ../_build/src/ppx_bitstring.native
-  NativeOpt: -ppx ../_build/src/ppx_bitstring.native
+  ByteOpt: -ppx ../_build/as_ppx/ppx.native
+  NativeOpt: -ppx ../_build/as_ppx/ppx.native
   BuildDepends:
     bitstring,
     ppx_bitstring,
