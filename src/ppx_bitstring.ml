@@ -581,7 +581,7 @@ let gen_int_extractor_dynamic ~loc nxt size sign endian =
   and fp = sprintf "Bitstring.extract_fastpath_%s_%s_%s" ft en sn
   in
   [%expr
-    if ([%e eoff] land 7) = 0 then
+    if Pervasives.(=) ([%e eoff] land 7) 0 then
       [%e evar ~loc fp] [%e edat] ([%e eoff] lsr 3)
     else
       [%e evar ~loc ex] [%e edat] [%e eoff] [%e elen] [%e int ~loc size]]
@@ -773,14 +773,14 @@ and gen_bound_bitstring ~loc cur nxt fld beh fields =
   match p with
   | { ppat_desc = Ppat_var(_) } ->
     [%expr
-      if [%e nxt.len.exp] >= [%e l] then
+      if Pervasives.(>=) [%e nxt.len.exp] [%e l] then
         let [%p p] = [%e (gen_value ~loc nxt fld)] in
         [%e (gen_next ~loc cur nxt fld beh fields)]
       else ()]
       [@metaloc loc]
   | [%pat? _ ] ->
     [%expr
-      if [%e nxt.len.exp] >= [%e l] then
+      if Pervasives.(>=) [%e nxt.len.exp] [%e l] then
         [%e (gen_next ~loc cur nxt fld beh fields)]
       else ()]
       [@metaloc loc]
@@ -793,7 +793,7 @@ and gen_bound_string ~loc cur nxt fld beh fields =
   let (l, _) = fld.MatchField.len
   in
   [%expr
-    if [%e nxt.len.exp] >= [%e l] then
+    if Pervasives.(>=) [%e nxt.len.exp] [%e l] then
       [%e (gen_match ~loc cur nxt fld beh fields)]
     else ()]
     [@metaloc loc]
@@ -804,7 +804,7 @@ and gen_bound_int ~loc cur nxt fld beh fields =
   let (l, _) = fld.MatchField.len
   in
   [%expr
-    if [%e l] >= 1 && [%e l] <= 64 && [%e nxt.len.exp] >= [%e l] then
+    if Pervasives.(>=) [%e l] 1 && Pervasives.(<=) [%e l] 64 && Pervasives.(>=) [%e nxt.len.exp] [%e l] then
       [%e (gen_match ~loc cur nxt fld beh fields)]
     else ()]
     [@metaloc loc]
@@ -1074,7 +1074,7 @@ let gen_assignment_behavior ~loc sym fields =
   let post =
     [%expr
       let _res = [%e rep] in
-      if (Bitstring.bitstring_length _res) = [%e len]
+      if Pervasives.(=) (Bitstring.bitstring_length _res) [%e len]
       then _res else raise Exit]
       [@metaloc loc]
   in
