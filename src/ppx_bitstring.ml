@@ -576,12 +576,16 @@ let gen_int_extractor_dynamic ~loc nxt size sign endian =
   let sn = Sign.to_string sign
   and it = get_inttype ~loc ~fastpath:false size
   and ft = get_inttype ~loc ~fastpath:true size
+  and es = int ~loc size
   and en = Endian.to_string endian in
   let ex = sprintf "Bitstring.extract_%s_%s_%s" it en sn
   and fp = sprintf "Bitstring.extract_fastpath_%s_%s_%s" ft en sn
   in
   [%expr
-    if Pervasives.(=) ([%e eoff] land 7) 0 then
+    if Pervasives.(=) ([%e eoff] land 7) 0 &&
+       Pervasives.(>) [%e es] 8 &&
+       Pervasives.(=) ([%e es] land 7) 0
+    then
       [%e evar ~loc fp] [%e edat] ([%e eoff] lsr 3)
     else
       [%e evar ~loc ex] [%e edat] [%e eoff] [%e elen] [%e int ~loc size]]
@@ -867,7 +871,7 @@ let mark_optimized_fastpath fields =
   let check_field off tuple =
     match tuple with
     | { pat; len = (l, Some (v)); qls = { value_type = Some (Type.Int) }; _ } ->
-      if (off land 7) = 0 && v > 8 && (v land 8) = 0 then
+      if (off land 7) = 0 && v > 8 && (v land 7) = 0 then
         (Some (off + v), MatchField.Tuple { tuple with opt = true })
       else
         (None, MatchField.Tuple tuple)
