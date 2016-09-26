@@ -1,41 +1,68 @@
-# OASIS_START
-# DO NOT EDIT (digest: a3c674b4239234cbbe53afe090018954)
+# Generic Makefile for oasis project
 
-SETUP = ocaml setup.ml
+SETUP := setup.exe
+NAME := ppx_bitstring
+PREFIX ?= $(shell grep ^prefix= setup.data | cut -d\" -f 2)
 
-build: setup.data
-	$(SETUP) -build $(BUILDFLAGS)
+# Default rule
+default: build
 
-doc: setup.data build
-	$(SETUP) -doc $(DOCFLAGS)
+setup.exe: _oasis setup.ml
+	ocamlfind ocamlopt -o $@ -linkpkg -package ocamlbuild,oasis.dynrun setup.ml || \
+	  ocamlfind ocamlc -o $@ -linkpkg -package ocamlbuild,oasis.dynrun setup.ml || true
+	for f in setup.*; do [ $$f = $@ -o $$f = setup.ml ] || rm -f $$f; done
 
-test: setup.data build
-	$(SETUP) -test $(TESTFLAGS)
+build: $(SETUP) setup.data
+	./$(SETUP) -build $(BUILDFLAGS)
+	$(MAKE) $(NAME).install
 
-all:
-	$(SETUP) -all $(ALLFLAGS)
+doc: $(SETUP) setup.data build
+	./$(SETUP) -doc $(DOCFLAGS)
 
-install: setup.data
-	$(SETUP) -install $(INSTALLFLAGS)
+test: $(SETUP) setup.data build
+	./$(SETUP) -test $(TESTFLAGS)
 
-uninstall: setup.data
-	$(SETUP) -uninstall $(UNINSTALLFLAGS)
+all: $(SETUP)
+	./$(SETUP) -all $(ALLFLAGS)
+	$(MAKE) $(NAME).install
 
-reinstall: setup.data
-	$(SETUP) -reinstall $(REINSTALLFLAGS)
+$(NAME).install: install.ml setup.log setup.data
+	ocaml -I "$(OCAML_TOPLEVEL_PATH)" install.ml
 
-clean:
-	$(SETUP) -clean $(CLEANFLAGS)
+install: $(NAME).install
+	opam-installer -i --prefix $(PREFIX) $(NAME).install
 
-distclean:
-	$(SETUP) -distclean $(DISTCLEANFLAGS)
+uninstall: $(NAME).install
+	opam-installer -u --prefix $(PREFIX) $(NAME).install
 
-setup.data:
-	$(SETUP) -configure $(CONFIGUREFLAGS)
+reinstall: $(NAME).install
+	opam-installer -u --prefix $(PREFIX) $(NAME).install &> /dev/null || true
+	opam-installer -i --prefix $(PREFIX) $(NAME).install
 
-configure:
-	$(SETUP) -configure $(CONFIGUREFLAGS)
+bin.tar.gz: $(NAME).install
+	rm -rf _install
+	mkdir _install
+	opam-installer -i --prefix _install $(NAME).install
+	tar czf bin.tar.gz -C _install .
+	rm -rf _install
 
-.PHONY: build doc test all install uninstall reinstall clean distclean configure
+bin.lzo: $(NAME).install
+	rm -rf _install
+	mkdir _install
+	opam-installer -i --prefix _install $(NAME).install
+	cd _install && lzop -1 -P -o ../bin.lzo `find . -type f`
+	rm -rf _install
 
-# OASIS_STOP
+clean: $(SETUP)
+	./$(SETUP) -clean $(CLEANFLAGS)
+
+distclean: $(SETUP)
+	./$(SETUP) -distclean $(DISTCLEANFLAGS)
+
+configure: $(SETUP)
+	./$(SETUP) -configure $(CONFIGUREFLAGS)
+
+setup.data: $(SETUP)
+	./$(SETUP) -configure $(CONFIGUREFLAGS)
+
+.PHONY: default build doc test all install uninstall reinstall clean distclean configure

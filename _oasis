@@ -1,91 +1,37 @@
-OASISFormat: 0.4
-OCamlVersion: >= 4.03
-Name: ppx_bitstring
-Version: 1.3.0
-License: ISC
-Authors: Xavier Guérin
-BuildTools: ocamlbuild
-Plugins: DevFiles (0.4)
-Synopsis: PPX plugin for the OCAML OPAM bitstring package.
-Description: PPX plugin for the OCAML OPAM bitstring package.
-Homepage: https://github.com/xguerin/ppx_bitstring
-AlphaFeatures: ocamlbuild_more_args
-XOCamlbuildPluginTags: package(ppx_driver.ocamlbuild), package(js-build-tools.ocamlbuild_goodies)
-FilesAB: src/META.ab
+AlphaFeatures:          ocamlbuild_more_args
+Authors:                Xavier Guérin
+BetaFeatures:           section_object
+BuildTools:             ocamlbuild
+Description:            PPX plugin for the OCAML OPAM bitstring package.
+FilesAB:                META.ab
+FindlibVersion:         >= 1.3.2
+Homepage:               https://github.com/xguerin/ppx_bitstring
+License:                ISC
+Name:                   ppx_bitstring
+OASISFormat:            0.4
+OCamlVersion:           >= 4.03
+Plugins:                DevFiles (0.4)
+Synopsis:               PPX plugin for the OCAML OPAM bitstring package.
+Version:                1.3.1
+XOCamlbuildPluginTags:  package(ppx_driver.ocamlbuild), package(js-build-tools.ocamlbuild_goodies)
 
 SourceRepository github
   Type:     git
   Location: https://github.com/xguerin/ppx_bitstring.git
 
 Library ppx_bitstring
-  Path:    src/
-  Modules: Ppx_bitstring
-  BuildDepends:
-    compiler-libs.common,
-    ppx_tools,
-    ppx_tools.metaquot,
-    ppx_core,
-    ppx_driver
+  Path:         src/
+  Pack:         false
+  Modules:      Ppx_bitstring
+  BuildDepends: compiler-libs.common,
+                ppx_tools,
+                ppx_tools.metaquot,
+                ppx_core,
+                ppx_driver
 
 Executable ppx
   Path:           as_ppx
   MainIs:         ppx.ml
   CompiledObject: best
-  Install:        true
-  BuildDepends:
-    ppx_bitstring,
-    ppx_driver
-
-Executable parser_test
-  Path: tests
-  MainIs: BitstringParserTest.ml
-  CompiledObject: best
-  Install: false
-  ByteOpt: -ppx ../_build/as_ppx/ppx.native
-  NativeOpt: -ppx ../_build/as_ppx/ppx.native
-  BuildDepends:
-    bitstring,
-    ppx_bitstring,
-    oUnit
-
-Test parser_test
-  Run$: flag(tests)
-  TestTools: parser_test
-  Command: $parser_test
-  WorkingDirectory: tests
-
-Executable constructor_test
-  Path: tests
-  MainIs: BitstringConstructorTest.ml
-  CompiledObject: best
-  Install: false
-  ByteOpt: -ppx ../_build/as_ppx/ppx.native
-  NativeOpt: -ppx ../_build/as_ppx/ppx.native
-  BuildDepends:
-    bitstring,
-    ppx_bitstring,
-    oUnit
-
-Test constructor_test
-  Run$: flag(tests)
-  TestTools: constructor_test
-  Command: $constructor_test
-  WorkingDirectory: tests
-
-Executable qualifier_test
-  Path: tests
-  MainIs: BitstringQualifierTest.ml
-  CompiledObject: best
-  Install: false
-  ByteOpt: -ppx ../_build/as_ppx/ppx.native
-  NativeOpt: -ppx ../_build/as_ppx/ppx.native
-  BuildDepends:
-    bitstring,
-    ppx_bitstring,
-    oUnit
-
-Test qualifier_test
-  Run$: flag(tests)
-  TestTools: qualifier_test
-  Command: $qualifier_test
-  WorkingDirectory: tests
+  BuildDepends:   ppx_bitstring,
+                  ppx_driver
