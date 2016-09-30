@@ -35,3 +35,54 @@ Executable ppx
   CompiledObject: best
   BuildDepends:   ppx_bitstring,
                   ppx_driver
+
+Executable ppx_bitstring_constructor_test
+  Path:           tests
+  MainIs:         BitstringConstructorTest.ml
+  CompiledObject: best
+  ByteOpt:        -ppx ../_build/as_ppx/ppx.native
+  NativeOpt:      -ppx ../_build/as_ppx/ppx.native
+  Install:        false
+  Build$:         flag(tests)
+  BuildDepends:   bitstring,
+                  oUnit
+
+Test ppx_bitstring_constructor_test
+  TestTools:        ppx_bitstring_constructor_test
+  Command:          $ppx_bitstring_constructor_test
+  Run$:             flag(tests)
+  WorkingDirectory: tests
+
+Executable ppx_bitstring_parser_test
+  Path:           tests
+  MainIs:         BitstringParserTest.ml
+  CompiledObject: best
+  ByteOpt:        -ppx ../_build/as_ppx/ppx.native
+  NativeOpt:      -ppx ../_build/as_ppx/ppx.native
+  Install:        false
+  Build$:         flag(tests)
+  BuildDepends:   bitstring,
+                  oUnit
+
+Test ppx_bitstring_parser_test
+  TestTools:        ppx_bitstring_parser_test
+  Command:          $ppx_bitstring_parser_test
+  Run$:             flag(tests)
+  WorkingDirectory: tests
+
+Executable ppx_bitstring_qualifier_test
+  Path:           tests
+  MainIs:         BitstringQualifierTest.ml
+  CompiledObject: best
+  ByteOpt:        -ppx ../_build/as_ppx/ppx.native
+  NativeOpt:      -ppx ../_build/as_ppx/ppx.native
+  Install:        false
+  Build$:         flag(tests)
+  BuildDepends:   bitstring,
+                  oUnit
+
+Test ppx_bitstring_qualifier_test
+  TestTools:        ppx_bitstring_qualifier_test
+  Command:          $ppx_bitstring_qualifier_test
+  Run$:             flag(tests)
+  WorkingDirectory: tests

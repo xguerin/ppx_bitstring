@@ -1,5 +1,5 @@
 (* OASIS_START *)
-(* DO NOT EDIT (digest: 52bbd4a39a37459446b2622a0b7b542d) *)
+(* DO NOT EDIT (digest: 3a4e0b1513020bc802acc50b7e932a71) *)
 module OASISGettext = struct
 (* # 22 "src/oasis/OASISGettext.ml" *)
 
@@ -771,54 +771,18 @@ let package_default =
      lib_c = [];
      flags =
        [
-          (["oasis_executable_parser_test_byte"; "ocaml"; "link"; "byte"],
-            [
-               (OASISExpr.EBool true,
-                 S [A "-ppx"; A "../_build/as_ppx/ppx.native"])
-            ]);
-          (["oasis_executable_parser_test_native"; "ocaml"; "link"; "native"],
-            [
-               (OASISExpr.EBool true,
-                 S [A "-ppx"; A "../_build/as_ppx/ppx.native"])
-            ]);
-          (["oasis_executable_parser_test_byte"; "ocaml"; "ocamldep"; "byte"],
-            [
-               (OASISExpr.EBool true,
-                 S [A "-ppx"; A "../_build/as_ppx/ppx.native"])
-            ]);
           ([
-              "oasis_executable_parser_test_native";
+              "oasis_executable_ppx_bitstring_constructor_test_byte";
               "ocaml";
-              "ocamldep";
-              "native"
-           ],
-            [
-               (OASISExpr.EBool true,
-                 S [A "-ppx"; A "../_build/as_ppx/ppx.native"])
-            ]);
-          (["oasis_executable_parser_test_byte"; "ocaml"; "compile"; "byte"],
-            [
-               (OASISExpr.EBool true,
-                 S [A "-ppx"; A "../_build/as_ppx/ppx.native"])
-            ]);
-          ([
-              "oasis_executable_parser_test_native";
-              "ocaml";
-              "compile";
-              "native"
-           ],
-            [
-               (OASISExpr.EBool true,
-                 S [A "-ppx"; A "../_build/as_ppx/ppx.native"])
-            ]);
-          (["oasis_executable_constructor_test_byte"; "ocaml"; "link"; "byte"
+              "link";
+              "byte"
            ],
             [
                (OASISExpr.EBool true,
                  S [A "-ppx"; A "../_build/as_ppx/ppx.native"])
             ]);
           ([
-              "oasis_executable_constructor_test_native";
+              "oasis_executable_ppx_bitstring_constructor_test_native";
               "ocaml";
               "link";
               "native"
@@ -828,7 +792,7 @@ let package_default =
                  S [A "-ppx"; A "../_build/as_ppx/ppx.native"])
             ]);
           ([
-              "oasis_executable_constructor_test_byte";
+              "oasis_executable_ppx_bitstring_constructor_test_byte";
               "ocaml";
               "ocamldep";
               "byte"
@@ -838,7 +802,7 @@ let package_default =
                  S [A "-ppx"; A "../_build/as_ppx/ppx.native"])
             ]);
           ([
-              "oasis_executable_constructor_test_native";
+              "oasis_executable_ppx_bitstring_constructor_test_native";
               "ocaml";
               "ocamldep";
               "native"
@@ -848,7 +812,7 @@ let package_default =
                  S [A "-ppx"; A "../_build/as_ppx/ppx.native"])
             ]);
           ([
-              "oasis_executable_constructor_test_byte";
+              "oasis_executable_ppx_bitstring_constructor_test_byte";
               "ocaml";
               "compile";
               "byte"
@@ -858,7 +822,7 @@ let package_default =
                  S [A "-ppx"; A "../_build/as_ppx/ppx.native"])
             ]);
           ([
-              "oasis_executable_constructor_test_native";
+              "oasis_executable_ppx_bitstring_constructor_test_native";
               "ocaml";
               "compile";
               "native"
@@ -867,13 +831,18 @@ let package_default =
                (OASISExpr.EBool true,
                  S [A "-ppx"; A "../_build/as_ppx/ppx.native"])
             ]);
-          (["oasis_executable_qualifier_test_byte"; "ocaml"; "link"; "byte"],
+          ([
+              "oasis_executable_ppx_bitstring_parser_test_byte";
+              "ocaml";
+              "link";
+              "byte"
+           ],
             [
                (OASISExpr.EBool true,
                  S [A "-ppx"; A "../_build/as_ppx/ppx.native"])
             ]);
           ([
-              "oasis_executable_qualifier_test_native";
+              "oasis_executable_ppx_bitstring_parser_test_native";
               "ocaml";
               "link";
               "native"
@@ -883,7 +852,7 @@ let package_default =
                  S [A "-ppx"; A "../_build/as_ppx/ppx.native"])
             ]);
           ([
-              "oasis_executable_qualifier_test_byte";
+              "oasis_executable_ppx_bitstring_parser_test_byte";
               "ocaml";
               "ocamldep";
               "byte"
@@ -893,7 +862,7 @@ let package_default =
                  S [A "-ppx"; A "../_build/as_ppx/ppx.native"])
             ]);
           ([
-              "oasis_executable_qualifier_test_native";
+              "oasis_executable_ppx_bitstring_parser_test_native";
               "ocaml";
               "ocamldep";
               "native"
@@ -903,7 +872,7 @@ let package_default =
                  S [A "-ppx"; A "../_build/as_ppx/ppx.native"])
             ]);
           ([
-              "oasis_executable_qualifier_test_byte";
+              "oasis_executable_ppx_bitstring_parser_test_byte";
               "ocaml";
               "compile";
               "byte"
@@ -913,7 +882,67 @@ let package_default =
                  S [A "-ppx"; A "../_build/as_ppx/ppx.native"])
             ]);
           ([
-              "oasis_executable_qualifier_test_native";
+              "oasis_executable_ppx_bitstring_parser_test_native";
+              "ocaml";
+              "compile";
+              "native"
+           ],
+            [
+               (OASISExpr.EBool true,
+                 S [A "-ppx"; A "../_build/as_ppx/ppx.native"])
+            ]);
+          ([
+              "oasis_executable_ppx_bitstring_qualifier_test_byte";
+              "ocaml";
+              "link";
+              "byte"
+           ],
+            [
+               (OASISExpr.EBool true,
+                 S [A "-ppx"; A "../_build/as_ppx/ppx.native"])
+            ]);
+          ([
+              "oasis_executable_ppx_bitstring_qualifier_test_native";
+              "ocaml";
+              "link";
+              "native"
+           ],
+            [
+               (OASISExpr.EBool true,
+                 S [A "-ppx"; A "../_build/as_ppx/ppx.native"])
+            ]);
+          ([
+              "oasis_executable_ppx_bitstring_qualifier_test_byte";
+              "ocaml";
+              "ocamldep";
+              "byte"
+           ],
+            [
+               (OASISExpr.EBool true,
+                 S [A "-ppx"; A "../_build/as_ppx/ppx.native"])
+            ]);
+          ([
+              "oasis_executable_ppx_bitstring_qualifier_test_native";
+              "ocaml";
+              "ocamldep";
+              "native"
+           ],
+            [
+               (OASISExpr.EBool true,
+                 S [A "-ppx"; A "../_build/as_ppx/ppx.native"])
+            ]);
+          ([
+              "oasis_executable_ppx_bitstring_qualifier_test_byte";
+              "ocaml";
+              "compile";
+              "byte"
+           ],
+            [
+               (OASISExpr.EBool true,
+                 S [A "-ppx"; A "../_build/as_ppx/ppx.native"])
+            ]);
+          ([
+              "oasis_executable_ppx_bitstring_qualifier_test_native";
               "ocaml";
               "compile";
               "native"
@@ -923,7 +952,7 @@ let package_default =
                  S [A "-ppx"; A "../_build/as_ppx/ppx.native"])
             ])
        ];
-     includes = [("tests", ["src"]); ("as_ppx", ["src"])]
+     includes = [("as_ppx", ["src"])]
   }
   ;;
 
@@ -931,7 +960,7 @@ let conf = {MyOCamlbuildFindlib.no_automatic_syntax = false}
 
 let dispatch_default = MyOCamlbuildBase.dispatch_default conf package_default;;
 
-# 935 "myocamlbuild.ml"
+# 964 "myocamlbuild.ml"
 (* OASIS_STOP *)
 let () =
   Ocamlbuild_plugin.dispatch (fun hook ->

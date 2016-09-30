@@ -98,6 +98,8 @@ This extension point supports error reporting. However, the algorithm is rather 
 
 ## Contribute
 
+### Code generation
+
 To see the parse tree of a ML file:
 
 ```bash
@@ -109,6 +111,10 @@ To see the output of a development version of the extension:
 ```bash
 ocamlfind opt -package bitstring,core -thread -dsource -ppx ./ppx_bitstring foo.ml
 ```
+
+### Oasis file update
+
+We use Jane Street's own configure/Makefile scripts. When updating `_oasis` and calling `oasis setup`, any changes to configure and Makefile **must be reverted**.
 
 ## License
 
