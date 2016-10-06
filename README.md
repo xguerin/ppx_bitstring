@@ -114,7 +114,7 @@ ocamlfind opt -package bitstring,core -thread -dsource -ppx ./ppx_bitstring foo.
 
 ### Oasis file update
 
-We use Jane Street's own configure/Makefile scripts. When updating `_oasis` and calling `oasis setup`, any changes to configure and Makefile **must be reverted**.
+We use Jane Street's own configure/Makefile scripts. When updating `_oasis` and calling `oasis setup`, any changes to configure and Makefile **must be reverted**. In addition, `oasis setup` must **not** be run with `v0.4.7` of `oasis`. We used to have a hard conflict in the `opam` file but that caused too many headaches.
 
 ## License
 

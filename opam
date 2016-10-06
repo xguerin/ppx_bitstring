@@ -1,6 +1,6 @@
 opam-version: "1.2"
 name: "ppx_bitstring"
-version: "1.3.1"
+version: "1.3.2"
 maintainer: "Xavier Guérin <github@applepine.org>"
 authors: "Xavier Guérin <github@applepine.org>"
 homepage: "https://github.com/xguerin/ppx_bitstring"
@@ -23,4 +23,3 @@ depends: [
   "ounit"          {build}
 ]
 available: ocaml-version >= "4.03"
-conflicts: [ "oasis" {= "0.4.7"} ]
