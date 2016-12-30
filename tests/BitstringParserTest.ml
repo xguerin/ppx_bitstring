@@ -195,15 +195,28 @@ let function_parser_inline_test context =
     assert_bool "Invlaid bitstring" false
 
 (*
+ * parser with a guard (PR#16)
+ *)
+
+let parser_with_guard_test context =
+  let bits = Bitstring.bitstring_of_string "abc" in
+  match%bitstring bits with
+  | {| "abc" : 24 : string |} when false ->
+    assert_bool "Guard was ignored" false
+  | {| _ |} ->
+    assert_bool "Guard was honored" true
+
+(*
  * Test suite definition
  *)
 
 let suite = "BitstringParserTest" >::: [
-    "ext3"            >:: ext3_test;
-    "gif"             >:: gif_test;
-    "pcap"            >:: pcap_test;
-    "function"        >:: function_parser_test;
-    "function_inline" >:: function_parser_inline_test
+    "ext3"              >:: ext3_test;
+    "gif"               >:: gif_test;
+    "pcap"              >:: pcap_test;
+    "function"          >:: function_parser_test;
+    "function_inline"   >:: function_parser_inline_test;
+    "parser_with_guard" >:: parser_with_guard_test
   ]
 
 let () = run_test_tt_main suite
