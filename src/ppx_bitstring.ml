@@ -929,7 +929,7 @@ let gen_cases ~loc ident cases =
   and tupl = [%pat? ([%p cur.dat.pat], [%p cur.off.pat], [%p cur.len.pat])][@metaloc loc]
   and fnam = str ~loc loc.Location.loc_start.pos_fname
   and lpos = int ~loc loc.Location.loc_start.pos_lnum
-  and cpos = int ~loc loc.Location.loc_start.pos_cnum
+  and cpos = int ~loc (loc.Location.loc_start.pos_cnum - loc.Location.loc_start.pos_bol)
   in
   List.fold_left
     ~init:[]
@@ -962,7 +962,7 @@ let gen_constructor_exn ~loc =
   let open Location in
   [%expr Bitstring.Construct_failure (
       [%e str ~loc "Bad field value"],
-        [%e str ~loc "None"],
+        [%e str ~loc loc.loc_start.pos_fname],
         [%e int ~loc loc.loc_start.pos_lnum],
         [%e int ~loc loc.loc_start.pos_cnum])]
     [@metaloc loc]
