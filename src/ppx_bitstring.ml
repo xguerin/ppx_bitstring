@@ -182,7 +182,7 @@ let location_exn ~loc msg =
 (* Helper functions *)
 
 let split_string ~on s =
-  Misc.split s on
+  Str.split (Str.regexp on) s
 ;;
 
 let option_bind opt f =
@@ -281,7 +281,7 @@ let find_loc_boundaries ~loc last rem =
 let rec split_loc_rec ~loc = function
   | [] -> []
   | hd :: tl ->
-    let line_list = split_string ~on:'\n' hd
+    let line_list = split_string ~on:"\n" hd
                     |> List.rev
                     |> List.map ~f:String.length in
     begin
@@ -474,7 +474,7 @@ let rec evaluate_expr = function
 
 let parse_match_fields str =
   let open MatchField in
-  split_string ~on:':' str.txt
+  split_string ~on:":" str.txt
   |> split_loc ~loc:str.loc
   |> function
   | [ { txt = "_" ; loc } as pat ] ->
@@ -502,7 +502,7 @@ let parse_match_fields str =
 
 let parse_const_fields str =
   let open Qualifiers in
-  split_string ~on:':' str.txt
+  split_string ~on:":" str.txt
   |> split_loc ~loc:str.loc
   |> function
   | [ vl; len ] ->
@@ -903,7 +903,7 @@ let gen_case cur nxt res case =
       | None -> beh
       | Some cond -> [%expr if [%e cond] then [%e beh] else ()][@metaloc loc]
     in
-    split_string ~on:';' value
+    split_string ~on:";" value
     |> split_loc ~loc
     |> List.map ~f:parse_match_fields
     |> check_for_open_endedness
@@ -1099,7 +1099,7 @@ let gen_assignment_behavior ~loc sym fields =
 ;;
 
 let parse_assignment_behavior ~loc sym value =
-  split_string ~on:';' value
+  split_string ~on:";" value
   |> split_loc ~loc
   |> List.map ~f:(fun flds -> parse_const_fields flds)
   |> gen_assignment_behavior ~loc sym

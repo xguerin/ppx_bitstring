@@ -2,7 +2,7 @@ true: predicate(custom_ppx)
 <src/*>: linkall
 <as_ppx/ppx.{byte,native}>: predicate(ppx_driver)
 # OASIS_START
-# DO NOT EDIT (digest: c5e65c4fec5e2ba755e30b3187212cc6)
+# DO NOT EDIT (digest: 193adee021ff34d214e72ebf114c83c5)
 # Ignore VCS directories, you can use the same kind of rule outside
 # OASIS_START/STOP if you want to exclude directories that contains
 # useless stuff for the build process
@@ -24,18 +24,21 @@ true: annot, bin_annot
 <src/*.ml{,i,y}>: package(ppx_driver)
 <src/*.ml{,i,y}>: package(ppx_tools)
 <src/*.ml{,i,y}>: package(ppx_tools.metaquot)
+<src/*.ml{,i,y}>: package(str)
 # Executable ppx
 <as_ppx/ppx.{native,byte}>: package(compiler-libs.common)
 <as_ppx/ppx.{native,byte}>: package(ppx_core)
 <as_ppx/ppx.{native,byte}>: package(ppx_driver)
 <as_ppx/ppx.{native,byte}>: package(ppx_tools)
 <as_ppx/ppx.{native,byte}>: package(ppx_tools.metaquot)
+<as_ppx/ppx.{native,byte}>: package(str)
 <as_ppx/ppx.{native,byte}>: use_ppx_bitstring
 <as_ppx/*.ml{,i,y}>: package(compiler-libs.common)
 <as_ppx/*.ml{,i,y}>: package(ppx_core)
 <as_ppx/*.ml{,i,y}>: package(ppx_driver)
 <as_ppx/*.ml{,i,y}>: package(ppx_tools)
 <as_ppx/*.ml{,i,y}>: package(ppx_tools.metaquot)
+<as_ppx/*.ml{,i,y}>: package(str)
 <as_ppx/*.ml{,i,y}>: use_ppx_bitstring
 # Executable ppx_bitstring_constructor_test
 <tests/BitstringConstructorTest.{native,byte}>: oasis_executable_ppx_bitstring_constructor_test_byte
