@@ -897,8 +897,13 @@ let gen_case cur nxt res case =
   let loc = case.pc_lhs.ppat_loc in
   match case.pc_lhs.ppat_desc with
   | Ppat_constant (Pconst_string (value, _)) ->
-    let beh = [%expr [%e res.exp] := Some ([%e case.pc_rhs]); raise Exit][@metaloc loc]
-    in split_string ~on:';' value
+    let beh = [%expr [%e res.exp] := Some ([%e case.pc_rhs]); raise Exit][@metaloc loc] in
+    let beh =
+      match case.pc_guard with
+      | None -> beh
+      | Some cond -> [%expr if [%e cond] then [%e beh] else ()][@metaloc loc]
+    in
+    split_string ~on:';' value
     |> split_loc ~loc
     |> List.map ~f:parse_match_fields
     |> check_for_open_endedness
