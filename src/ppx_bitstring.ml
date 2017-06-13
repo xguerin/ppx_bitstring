@@ -549,7 +549,8 @@ let check_field_len ~loc fld =
 
 let get_inttype ~loc ~fastpath = function
   | v when v > 8  && v <= 16 -> if fastpath then "int16" else "int"
-  | v when v > 16 && v <= 32 -> "int32"
+  | v when v > 16 && v <= 31 -> if fastpath then "int32" else "int"
+  | v when v = 32 -> "int32"
   | v when v > 32 && v <= 64 -> "int64"
   | _ -> location_exn ~loc "Invalid integer size"
 ;;

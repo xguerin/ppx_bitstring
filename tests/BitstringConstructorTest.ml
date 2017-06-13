@@ -99,6 +99,26 @@ let external_value_test context =
   assert_equal str result
 
 (*
+ * Int for [17,31] bits test
+ *)
+
+let int_parser_test context =
+  let result = "\x00\x00\x02" in
+  let%bitstring bits = {| 2 : 24 |} in
+  let str = Bitstring.string_of_bitstring bits in
+  assert_equal str result
+
+(*
+ * Int32 for 32 bits test
+ *)
+
+let int32_parser_test context =
+  let result = "\x00\x00\x00\x02" in
+  let%bitstring bits = {| 2_l : 32 |} in
+  let str = Bitstring.string_of_bitstring bits in
+  assert_equal str result
+
+(*
  * Test suite definition
  *)
 
@@ -106,7 +126,9 @@ let suite = "BitstringConstructorTest" >::: [
     "imbricated_bistring_test"  >:: imbricated_bistring_test;
     "constructor_style_test"    >:: constructor_style_test;
     "swap_test"                 >:: swap_test;
-    "external_value_test"       >:: external_value_test
+    "external_value_test"       >:: external_value_test;
+    "int_parser_test"           >:: int_parser_test;
+    "int32_parser_test"         >:: int32_parser_test
   ]
 
 let () = run_test_tt_main suite
