@@ -23,8 +23,7 @@ Usage example with the `match` PPX extension:
 
 ```ocaml
 match%bitstring bs with
-| {|
-   ; 1 : 1
+| {| 1 : 1
    ; a : 2
    ; b : 16 : bigendian
    ; ...
@@ -35,23 +34,22 @@ match%bitstring bs with
 Usage example with the PPX extension for constructing bitstrings using the `let` syntax:
 
 ```ocaml
-let%bitstring my_bitstring = {|
-  ; 1 : 1
-  ; a : 2
-  ; b : 16 : bigendian
-  ; ...
-  |} in (* Do something here *)
+let%bitstring my_bitstring =
+  {| 1 : 1
+   ; a : 2
+   ; b : 16 : bigendian
+   ; ...
+   |} in (* Do something here *)
 ```
 Usage example with the PPX extension for constructing bitstrings using the constructor syntax:
 
 ```ocaml
-let my_bitstring =
-  [%bitstring {|
-  ; 1 : 1
-  ; a : 2
-  ; b : 16 : bigendian
-  ; ...
-  |}] in (* Do something here *)
+let my_bitstring = [%bitstring
+  {| 1 : 1
+   ; a : 2
+   ; b : 16 : bigendian
+   ; ...
+   |}] in (* Do something here *)
 ```
 
 The pattern syntax is the same as the one of the [original extension](http://people.redhat.com/~rjones/bitstring/html/Bitstring.html).
@@ -80,8 +78,7 @@ This extension adds support for pattern matching using the `function` keyword:
 
 ```ocaml
 let pattern_matcher = function%bitstring
-| {|
-   ; 1 : 1
+| {| 1 : 1
    ; a : 2
    ; b : 16 : bigendian
    ; ...
