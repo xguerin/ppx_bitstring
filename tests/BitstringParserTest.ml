@@ -22,7 +22,7 @@ open Bitstring
  *)
 
 let ext3_test context =
-  let bits = Bitstring.bitstring_of_file "ext3_sb" in
+  let bits = Bitstring.bitstring_of_file "../../../tests/ext3_sb" in
   match%bitstring bits with
   (*
    * Check if the file is an EXT3 superblock
@@ -55,7 +55,7 @@ let ext3_test context =
  *)
 
 let gif_test context =
-  let bits = Bitstring.bitstring_of_file "sad_face.gif" in
+  let bits = Bitstring.bitstring_of_file "../../../tests/sad_face.gif" in
   match%bitstring bits with
   (*
    * Check if the file is a GIF image
@@ -139,7 +139,7 @@ let pcap_packet_test context endian packet =
   | {| _ |} -> failwith "Not a valid packet descriptor"
 
 let pcap_test context =
-  let bits = Bitstring.bitstring_of_file "net.pcap" in
+  let bits = Bitstring.bitstring_of_file "../../../tests/net.pcap" in
   match%bitstring bits with
   (*
    * Check if the file is a PCAP file
@@ -218,5 +218,3 @@ let suite = "BitstringParserTest" >::: [
     "function_inline"   >:: function_parser_inline_test;
     "parser_with_guard" >:: parser_with_guard_test
   ]
-
-let () = run_test_tt_main suite

@@ -1,7 +1,7 @@
 _build
 *.native
 *.byte
-ppx_bitstring.ext
+ppx_bitstring.install
 temp
 *.o
 *.cmo
@@ -16,3 +16,6 @@ temp
 *Test
 setup.data
 META
+src/.merlin
+tests/.merlin
+

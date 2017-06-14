@@ -14,15 +14,22 @@
  * OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
  *)
 
+open Migrate_parsetree
+open Ast_403
+
+open Ast_convenience_403
 open Ast_mapper
-open Ast_convenience
 open Asttypes
-open StdLabels
-open Format
-open Lexing
-open Longident
 open Parsetree
+open Lexing
 open Printf
+
+(*
+ * Version management
+ *)
+
+let ocaml_version = Versions.ocaml_403
+let from_current = Versions.migrate Versions.ocaml_current ocaml_version
 
 (* Type definition *)
 
@@ -198,8 +205,9 @@ let rec process_expr_loc ~loc expr =
     { expr with pexp_desc = Pexp_ident(lident); pexp_loc = loc }
   | { pexp_desc = Pexp_tuple(ops) } ->
     let fld = List.fold_left
-        ~init:[]
-        ~f:(fun acc exp -> acc @ [ process_expr_loc ~loc exp ]) ops
+        (fun acc exp -> acc @ [ process_expr_loc ~loc exp ])
+        []
+        ops
     in { expr with pexp_desc = Pexp_tuple(fld); pexp_loc = loc }
   | { pexp_desc = Pexp_construct(ident, ops) } ->
     let lident = Location.mkloc ident.txt loc in
@@ -211,8 +219,9 @@ let rec process_expr_loc ~loc expr =
   | { pexp_desc = Pexp_apply(ident, ops) } ->
     let lident = process_expr_loc ~loc ident in
     let fld = List.fold_left
-        ~init:[]
-        ~f:(fun acc (lbl, exp) -> acc @ [ (lbl, (process_expr_loc ~loc exp)) ]) ops
+        (fun acc (lbl, exp) -> acc @ [ (lbl, (process_expr_loc ~loc exp)) ])
+        []
+        ops
     in { expr with pexp_desc = Pexp_apply(lident, fld); pexp_loc = loc }
   | { pexp_desc = Pexp_fun(ident, ops,
                            { ppat_desc = Ppat_var(pid); ppat_loc; ppat_attributes },
@@ -231,7 +240,9 @@ let rec process_expr_loc ~loc expr =
 
 let parse_expr expr =
   try
-    process_expr_loc ~loc:expr.loc (Parse.expression (Lexing.from_string expr.txt))
+    Parse.expression (Lexing.from_string expr.txt)
+    |> from_current.Versions.copy_expression
+    |> process_expr_loc ~loc:expr.loc
   with
     _ -> location_exn ~loc:expr.loc ("Parse expression error: '" ^ expr.txt ^ "'")
 ;;
@@ -247,7 +258,9 @@ let rec process_pat_loc ~loc pat =
 
 let parse_pattern pat =
   try
-    process_pat_loc ~loc:pat.loc (Parse.pattern (Lexing.from_string pat.txt))
+    Parse.pattern (Lexing.from_string pat.txt)
+    |> from_current.Versions.copy_pattern
+    |> process_pat_loc ~loc:pat.loc
   with
     _ -> location_exn ~loc:pat.loc ("Parse pattern error: '" ^ pat.txt ^ "'")
 ;;
@@ -258,7 +271,7 @@ let find_loc_boundaries ~loc last rem =
   let open Location in
   let { loc_start; loc_end; loc_ghost } = loc in
   let xtr_lines = List.length rem in
-  let xtr_char = List.fold_left ~init:xtr_lines ~f:(+) rem in
+  let xtr_char = List.fold_left (+) xtr_lines rem in
   let ne = { loc_start with
              pos_lnum = loc_start.pos_lnum + xtr_lines;
              pos_bol  = loc_start.pos_bol + xtr_char;
@@ -283,7 +296,7 @@ let rec split_loc_rec ~loc = function
   | hd :: tl ->
     let line_list = split_string ~on:"\n" hd
                     |> List.rev
-                    |> List.map ~f:String.length in
+                    |> List.map String.length in
     begin
       match line_list with
       | [] -> []
@@ -295,7 +308,7 @@ let rec split_loc_rec ~loc = function
 
 let split_loc ~loc lst =
   split_loc_rec ~loc lst
-  |> List.map2 lst ~f:(fun e loc -> Location.mkloc (Bytes.trim e) loc)
+  |> List.map2 (fun e loc -> Location.mkloc (Bytes.trim e) loc) lst
 ;;
 
 (* Processing qualifiers *)
@@ -384,8 +397,7 @@ let process_qual state qual =
       | None -> { state with save_offset_to = Some sub }
     end
   | _ ->
-    let sexp = Pprintast.string_of_expression qual in
-    location_exn ~loc ("Invalid qualifier: " ^ sexp)
+    location_exn ~loc "Invalid qualifier"
 ;;
 
 let parse_quals quals =
@@ -405,8 +417,7 @@ let parse_quals quals =
     process_quals Qualifiers.empty e
   (* Unrecognized expression *)
   | expr ->
-    let expr_str = Pprintast.string_of_expression expr in
-    location_exn ~loc:expr.pexp_loc ("Invalid qualifiers list: " ^ expr_str)
+    location_exn ~loc:expr.pexp_loc "Invalid qualifiers list"
 ;;
 
 (* Processing expression *)
@@ -906,7 +917,7 @@ let gen_case cur nxt res case =
     in
     split_string ~on:";" value
     |> split_loc ~loc
-    |> List.map ~f:parse_match_fields
+    |> List.map parse_match_fields
     |> check_for_open_endedness
     |> mark_optimized_fastpath
     |> gen_fields ~loc cur nxt beh
@@ -933,8 +944,8 @@ let gen_cases ~loc ident cases =
   and cpos = int ~loc (loc.Location.loc_start.pos_cnum - loc.Location.loc_start.pos_bol)
   in
   List.fold_left
-    ~init:[]
-    ~f:(fun acc case -> acc @ [ gen_case cur nxt res case ])
+    (fun acc case -> acc @ [ gen_case cur nxt res case ])
+    []
     cases
   |> gen_cases_sequence ~loc
   |> fun seq ->
@@ -1089,9 +1100,9 @@ let gen_assignment_behavior ~loc sym fields =
       [@metaloc loc]
   in
   let seq = List.fold_right
-      ~f:(fun fld acc -> [%expr [%e (gen_constructor ~loc sym fld)]; [%e acc]])
-      ~init:post
+      (fun fld acc -> [%expr [%e (gen_constructor ~loc sym fld)]; [%e acc]])
       fields
+      post
   in
   [%expr
     let [%p sym.Entity.pat] = Bitstring.Buffer.create () in
@@ -1102,7 +1113,7 @@ let gen_assignment_behavior ~loc sym fields =
 let parse_assignment_behavior ~loc sym value =
   split_string ~on:";" value
   |> split_loc ~loc
-  |> List.map ~f:(fun flds -> parse_const_fields flds)
+  |> List.map (fun flds -> parse_const_fields flds)
   |> gen_assignment_behavior ~loc sym
 ;;
 
@@ -1122,36 +1133,37 @@ let transform_single_let ~loc ast expr =
   | _ -> location_exn ~loc "Invalid pattern type"
 ;;
 
-(* Mapper *)
+(*
+ * Rewriter. See:
+ * https://github.com/let-def/ocaml-migrate-parsetree/blob/master/MANUAL.md#new-registration-interface
+ *)
 
-open Ppx_core.Std
+let extension expr =
+  let loc = expr.pexp_loc in
+  match expr.pexp_desc with
+  | Pexp_constant (Pconst_string (value, (_ : string option))) ->
+    gen_constructor_expr loc value
+  | Pexp_let (Nonrecursive, bindings, expr) ->
+    List.fold_right
+      (fun binding expr -> transform_single_let ~loc binding expr)
+      bindings
+      expr
+  | Pexp_match (ident, cases) ->
+    gen_cases ~loc ident cases
+  | Pexp_function (cases) ->
+    gen_function ~loc cases
+  | _ ->
+    location_exn ~loc
+      "'bitstring' can only be used with 'let', 'match', and as '[%bitstring]'"
 
-let extension =
-  Extension.V2.declare
-    "bitstring"
-    Extension.Context.expression
-    Ast_pattern.(single_expr_payload __)
-    (fun ~loc:_ ~path:_ expr ->
-      let loc = expr.pexp_loc in
-      let expansion =
-        match expr.pexp_desc with
-        | Pexp_constant (Pconst_string (value, (_ : string option))) ->
-           gen_constructor_expr loc value
-        | Pexp_let (Nonrecursive, bindings, expr) ->
-           List.fold_right bindings ~init:expr ~f:(fun binding expr ->
-               transform_single_let ~loc binding expr)
-        | Pexp_match (ident, cases) ->
-           gen_cases ~loc ident cases
-        | Pexp_function (cases) ->
-           gen_function ~loc cases
-        | _ ->
-           location_exn ~loc
-             "'bitstring' can only be used with 'let', 'match', and as '[%bitstring]'"
-      in
-      { expansion with pexp_attributes = expr.pexp_attributes }
-    )
-;;
+let expression mapper = function
+  | [%expr [%bitstring [%e? e0]]] -> mapper.expr mapper (extension e0)
+  | expr -> Ast_mapper.default_mapper.expr mapper expr
+
+let rewriter config cookies =
+  { Ast_mapper.default_mapper with expr = expression }
 
 let () =
-  Ppx_driver.register_transformation "bitstring" ~extensions:[extension]
+  Driver.register ~name:"ppx_bitstring" ~args:[] Versions.ocaml_403 rewriter;
+  Migrate_parsetree.Driver.run_main ()
 ;;

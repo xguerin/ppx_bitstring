@@ -1,4 +1,0 @@
-PKG compiler-libs.common ppx_tools.metaquot ppx_core ppx_driver ppx_bitstring bitstring oUnit
-
-S .
-B _build
