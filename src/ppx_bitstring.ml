@@ -1164,6 +1164,5 @@ let rewriter config cookies =
   { Ast_mapper.default_mapper with expr = expression }
 
 let () =
-  Driver.register ~name:"ppx_bitstring" ~args:[] Versions.ocaml_403 rewriter;
-  Migrate_parsetree.Driver.run_main ()
+  Driver.register ~name:"ppx_bitstring" ~args:[] Versions.ocaml_403 rewriter
 ;;
