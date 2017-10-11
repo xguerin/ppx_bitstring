@@ -5,6 +5,7 @@ script: bash -ex .travis-opam.sh
 env:
   - PACKAGE=ppx_bitstring OCAML_VERSION=4.03
   - PACKAGE=ppx_bitstring OCAML_VERSION=4.04
+  - PACKAGE=ppx_bitstring OCAML_VERSION=4.05
 os:
   - linux
   - osx
