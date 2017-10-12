@@ -1181,8 +1181,16 @@ let expression mapper = function
   | [%expr [%bitstring [%e? e0]]] -> mapper.expr mapper (extension e0)
   | expr -> Ast_mapper.default_mapper.expr mapper expr
 
-let rewriter config cookies =
-  { Ast_mapper.default_mapper with expr = expression }
+let structure_item_mapper mapper = function
+  | [%stri [%%bitstring let [%p? var] = [%e? e0]]] ->
+    [%stri let [%p mapper.pat mapper var] = [%e mapper.expr mapper (extension e0)]]
+  | stri -> Ast_mapper.default_mapper.structure_item mapper stri
+
+let rewriter config cookies = {
+  Ast_mapper.default_mapper with
+  expr = expression;
+  structure_item = structure_item_mapper;
+}
 
 let () =
   Driver.register ~name:"ppx_bitstring" ~args:[] Versions.ocaml_405 rewriter

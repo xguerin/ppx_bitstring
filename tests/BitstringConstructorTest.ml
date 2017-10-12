@@ -119,6 +119,17 @@ let int32_parser_test context =
   assert_equal str result
 
 (*
+ * Structural let
+ *)
+
+let%bitstring ext_bits = {| 2_l : 32 |}
+
+let str_item_test context =
+  let result = "\x00\x00\x00\x02" in
+  let str = Bitstring.string_of_bitstring ext_bits in
+  assert_equal str result
+
+(*
  * Test suite definition
  *)
 
@@ -128,7 +139,8 @@ let suite = "BitstringConstructorTest" >::: [
     "swap_test"                 >:: swap_test;
     "external_value_test"       >:: external_value_test;
     "int_parser_test"           >:: int_parser_test;
-    "int32_parser_test"         >:: int32_parser_test
+    "int32_parser_test"         >:: int32_parser_test;
+    "str_item_test"             >:: str_item_test
   ]
 
 let () = run_test_tt_main suite
