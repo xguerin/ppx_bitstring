@@ -211,13 +211,13 @@ let parser_with_guard_test context =
  *)
 
 let wrong_fp_extraction context =
-  let mb = ("\000\000\145", 0, 24) in
+  let mb = ((Bytes.of_string "\000\000\145"), 0, 24) in
   match%bitstring mb with
   | {| matched_value : 24 : bigendian |} -> assert_equal matched_value 145_l
   | {| _ |} -> assert_bool "Invalid bitstring" false
 
 let wrong_fp_extraction_dynamic context =
-  let mb = ("\000\000\000\145", 0, 32)
+  let mb = ((Bytes.of_string "\000\000\000\145"), 0, 32)
   and on = 8
   in
   match%bitstring mb with

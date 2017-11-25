@@ -305,7 +305,7 @@ let rec split_loc_rec ~loc = function
 
 let split_loc ~loc lst =
   split_loc_rec ~loc lst
-  |> List.map2 (fun e loc -> Location.mkloc (Bytes.trim e) loc) lst
+  |> List.map2 (fun e loc -> Location.mkloc (String.trim e) loc) lst
 ;;
 
 (* Processing qualifiers *)
@@ -502,7 +502,7 @@ let parse_match_fields str =
     let len = (eln, evaluate_expr eln) in
     MatchField.Tuple { pat; len; qls; opt }
   | [ stmt ] ->
-    let pat_str = StdLabels.Bytes.to_string stmt.txt in
+    let pat_str = stmt.txt in
     location_exn ~loc:stmt.loc ("Invalid statement: '" ^ pat_str ^ "'")
   | _ ->
     location_exn ~loc:str.loc "Invalid number of fields in statement"
@@ -530,7 +530,7 @@ let parse_const_fields str =
         (parse_expr vl, Some (parse_expr len), Some (q))
     end
   | [ stmt ] ->
-    let pat_str = StdLabels.Bytes.to_string stmt.txt in
+    let pat_str = stmt.txt in
     location_exn ~loc:stmt.loc ("Invalid statement: '" ^ pat_str ^ "'")
   | _ ->
     location_exn ~loc:str.loc "Invalid number of fields in statement"
