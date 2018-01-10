@@ -4,6 +4,10 @@
 
 PPX plugin for the OCAML OPAM bitstring package.
 
+## Please note
+
+This extension has been merged in [bitstring](https://github.com/xguerin/bitstring), officially
+replacing the original `camlp4` extension. This repository is now **unmaintained**.
 
 ## Overview
 
